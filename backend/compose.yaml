@@ -79,7 +79,7 @@ services:
   proxy:
     image: caddy:2-alpine
     environment:
-      BOOKLENDER_DOMAIN: ${BOOKLENDER_DOMAIN:?Set BOOKLENDER_DOMAIN in backend/.env}
+      BOOKLENDER_CADDY_ADDRESS: ${BOOKLENDER_CADDY_ADDRESS:?Set BOOKLENDER_CADDY_ADDRESS in backend/.env}
     ports:
       - "80:80"
       - "443:443"
