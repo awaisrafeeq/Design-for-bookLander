@@ -1,0 +1,78 @@
+name: Deploy BookLender to Hostinger
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: booklender-hostinger-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Build on Hostinger and deploy
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Configure SSH
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.HOSTINGER_SSH_PRIVATE_KEY }}
+          HOSTINGER_KNOWN_HOSTS: ${{ secrets.HOSTINGER_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          test -n "$SSH_PRIVATE_KEY"
+          test -n "$HOSTINGER_KNOWN_HOSTS"
+          install -m 700 -d "$HOME/.ssh"
+          printf '%s\n' "$SSH_PRIVATE_KEY" > "$HOME/.ssh/id_ed25519"
+          printf '%s\n' "$HOSTINGER_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
+          chmod 600 "$HOME/.ssh/id_ed25519" "$HOME/.ssh/known_hosts"
+
+      - name: Copy release source without deployment secrets
+        env:
+          HOSTINGER_HOST: ${{ secrets.HOSTINGER_HOST }}
+          HOSTINGER_USER: ${{ secrets.HOSTINGER_USER }}
+        run: |
+          set -euo pipefail
+          test -n "$HOSTINGER_HOST"
+          test -n "$HOSTINGER_USER"
+          ssh -i "$HOME/.ssh/id_ed25519" "$HOSTINGER_USER@$HOSTINGER_HOST" 'mkdir -p /opt/booklender'
+          rsync -az --delete \
+            --exclude='/.git/' \
+            --exclude='/.next/' \
+            --exclude='/node_modules/' \
+            --exclude='/.env' \
+            --exclude='/.env.*' \
+            --exclude='/backend/.env' \
+            --exclude='/backend/.venv/' \
+            --exclude='/.tmp/' \
+            -e "ssh -i $HOME/.ssh/id_ed25519" \
+            ./ "$HOSTINGER_USER@$HOSTINGER_HOST:/opt/booklender/"
+
+      - name: Build and start services on Hostinger
+        env:
+          HOSTINGER_HOST: ${{ secrets.HOSTINGER_HOST }}
+          HOSTINGER_USER: ${{ secrets.HOSTINGER_USER }}
+        run: |
+          set -euo pipefail
+          ssh -i "$HOME/.ssh/id_ed25519" "$HOSTINGER_USER@$HOSTINGER_HOST" '
+            set -eu
+            cd /opt/booklender
+            test -f backend/.env
+            docker compose --parallel 1 --env-file backend/.env -f backend/compose.yaml up --build -d --remove-orphans
+            for attempt in $(seq 1 30); do
+              if curl --fail --silent http://127.0.0.1:8001/health/ready >/dev/null && curl --fail --silent http://127.0.0.1:3000/login >/dev/null; then
+                break
+              fi
+              if [ "$attempt" -eq 30 ]; then
+                docker compose --env-file backend/.env -f backend/compose.yaml logs --tail=100 api frontend
+                exit 1
+              fi
+              sleep 5
+            done
+            docker compose --env-file backend/.env -f backend/compose.yaml ps
+          '

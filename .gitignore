@@ -1,0 +1,14 @@
+node_modules/
+.next/
+out/
+.env
+.env.*
+!.env.example
+backend/.env
+.venv/
+backend/.venv/
+.env*.local
+*.tsbuildinfo
+.tmp/
+# Client-provided documents and design references are private source material.
+docs/

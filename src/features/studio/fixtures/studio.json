@@ -1,0 +1,933 @@
+{
+  "posts": [
+    {
+      "id": 1,
+      "title": "Five scary reads under 250 pages",
+      "bookId": "castle",
+      "book": "We Have Always Lived in the Castle",
+      "author": "Shirley Jackson",
+      "cover": "#3B2C4A",
+      "accent": "#C9A2E8",
+      "source": "calendar",
+      "event": "Halloween",
+      "eventDays": 36,
+      "reason": "Short horror rents 2x in October",
+      "format": "carousel",
+      "platform": "Instagram",
+      "stage": "idea",
+      "fit": 5
+    },
+    {
+      "id": 2,
+      "title": "Read it before the series lands",
+      "bookId": "ledger",
+      "book": "The Quiet Ledger",
+      "author": "M. R. Hale",
+      "cover": "#E7D8B8",
+      "accent": "#B0572F",
+      "source": "news",
+      "event": "The Quiet Ledger on TV",
+      "eventDays": 19,
+      "reason": "Series announced 22 Sep. Searches up 4x.",
+      "format": "video",
+      "platform": "Instagram",
+      "stage": "idea",
+      "fit": 5
+    },
+    {
+      "id": 3,
+      "title": "Rain outside, long book inside",
+      "bookId": "rebecca",
+      "book": "Rebecca",
+      "author": "Daphne du Maurier",
+      "cover": "#5A1F2B",
+      "accent": "#D9A441",
+      "source": "calendar",
+      "event": "Cozy October",
+      "eventDays": 6,
+      "reason": "Autumn posts got 2x saves last year",
+      "format": "image",
+      "platform": "Facebook",
+      "stage": "idea",
+      "fit": 4
+    },
+    {
+      "id": 4,
+      "title": "Audiobooks for the school run",
+      "bookId": "hobbit",
+      "book": "The Hobbit",
+      "author": "J. R. R. Tolkien",
+      "cover": "#3E5A2A",
+      "accent": "#C99A3B",
+      "source": "team",
+      "event": "Team topic",
+      "eventDays": 14,
+      "reason": "Added by Hina",
+      "format": "video",
+      "platform": "Facebook",
+      "stage": "idea",
+      "fit": 3,
+      "human": true
+    },
+    {
+      "id": 5,
+      "title": "Last days of Banned Books Week",
+      "bookId": "beloved",
+      "book": "Beloved",
+      "author": "Toni Morrison",
+      "cover": "#6B2E1F",
+      "accent": "#E39B5C",
+      "source": "calendar",
+      "event": "Banned Books Week",
+      "eventDays": 2,
+      "reason": "Ends Sunday. Last year these posts did well.",
+      "format": "image",
+      "platform": "Instagram",
+      "stage": "idea",
+      "fit": 4
+    },
+    {
+      "id": 6,
+      "title": "Team pick of the week",
+      "bookId": "moscow",
+      "book": "A Gentleman in Moscow",
+      "author": "Amor Towles",
+      "cover": "#1F4E5A",
+      "accent": "#E0A43A",
+      "source": "team",
+      "event": "Team pick",
+      "eventDays": 5,
+      "reason": "Added by Omar",
+      "format": "image",
+      "platform": "Instagram",
+      "stage": "selected",
+      "human": true
+    },
+    {
+      "id": 7,
+      "title": "Dracula, one chapter a night",
+      "bookId": "dracula",
+      "book": "Dracula",
+      "author": "Bram Stoker",
+      "cover": "#161616",
+      "accent": "#B3202A",
+      "source": "calendar",
+      "event": "Halloween",
+      "eventDays": 36,
+      "reason": "Dracula is told in dated letters, like a calendar",
+      "format": "carousel",
+      "platform": "Instagram",
+      "stage": "selected"
+    },
+    {
+      "id": 8,
+      "title": "Hill House, before dark",
+      "bookId": "hill",
+      "book": "The Haunting of Hill House",
+      "author": "Shirley Jackson",
+      "cover": "#2B3A2F",
+      "accent": "#9FB38A",
+      "source": "calendar",
+      "event": "Halloween",
+      "eventDays": 36,
+      "reason": "Audiobook CDs rent more in October",
+      "format": "video",
+      "platform": "Instagram",
+      "stage": "generating",
+      "progress": 60
+    },
+    {
+      "id": 9,
+      "title": "Nobody sees what is on your shelf",
+      "bookId": "mockingbird",
+      "book": "To Kill a Mockingbird",
+      "author": "Harper Lee",
+      "cover": "#D9C7A3",
+      "accent": "#7A4B2A",
+      "source": "calendar",
+      "event": "Banned Books Week",
+      "eventDays": 2,
+      "reason": "Privacy angle tested well last year",
+      "format": "video",
+      "platform": "Instagram",
+      "stage": "review",
+      "version": 1,
+      "cost": 1.19,
+      "caption": "Rent the books people tried to ban. Nobody sees what is on your shelf. That is the point.",
+      "tags": "#BannedBooksWeek #BookLender",
+      "day": 1,
+      "time": "18:30"
+    },
+    {
+      "id": 10,
+      "title": "Four books a month. No late fees.",
+      "bookId": "rebecca",
+      "book": "Rebecca",
+      "author": "Daphne du Maurier",
+      "cover": "#5A1F2B",
+      "accent": "#D9A441",
+      "source": "calendar",
+      "event": "Cozy October",
+      "eventDays": 6,
+      "reason": "Plan posts get the most link clicks",
+      "format": "carousel",
+      "platform": "Instagram",
+      "stage": "review",
+      "version": 2,
+      "cost": 1.27,
+      "caption": "Longer nights need a longer pile. Four books a month, posted to your door. No due dates. No late fees.",
+      "tags": "#CozyOctober #BookLender",
+      "day": 2,
+      "time": "19:00",
+      "history": [
+        {
+          "version": 1,
+          "reason": "The look",
+          "note": "Too busy. Let the cover carry it."
+        }
+      ]
+    },
+    {
+      "id": 11,
+      "title": "Frankenstein, the first sci-fi novel",
+      "bookId": "frank",
+      "book": "Frankenstein",
+      "author": "Mary Shelley",
+      "cover": "#274060",
+      "accent": "#8FB8DE",
+      "source": "calendar",
+      "event": "Halloween",
+      "eventDays": 36,
+      "reason": "Classic horror is the top October search",
+      "format": "image",
+      "platform": "Facebook",
+      "stage": "review",
+      "version": 1,
+      "cost": 0.33,
+      "caption": "A storm, a monster and a 19-year-old author. Frankenstein arrives at your door in two days.",
+      "tags": "#Halloween #Frankenstein",
+      "warning": "Promises a delivery time",
+      "day": 3,
+      "time": "12:30"
+    },
+    {
+      "id": 12,
+      "title": "The Hobbit on audiobook CD",
+      "bookId": "hobbit",
+      "book": "The Hobbit",
+      "author": "J. R. R. Tolkien",
+      "cover": "#3E5A2A",
+      "accent": "#C99A3B",
+      "source": "team",
+      "event": "Team topic",
+      "eventDays": 14,
+      "reason": "Added by Hina",
+      "format": "image",
+      "platform": "Facebook",
+      "stage": "revision",
+      "human": true,
+      "version": 2,
+      "cost": 0.31,
+      "day": 4,
+      "time": "12:30",
+      "progress": 40,
+      "history": [
+        {
+          "version": 1,
+          "reason": "Wrong title",
+          "note": "Show the CD box, not the paperback."
+        }
+      ]
+    },
+    {
+      "id": 13,
+      "title": "Longer nights, longer books",
+      "bookId": "moscow",
+      "book": "A Gentleman in Moscow",
+      "author": "Amor Towles",
+      "cover": "#1F4E5A",
+      "accent": "#E0A43A",
+      "source": "calendar",
+      "event": "Cozy October",
+      "format": "video",
+      "platform": "Instagram",
+      "stage": "scheduled",
+      "version": 1,
+      "day": 0,
+      "time": "18:30",
+      "approvedBy": "Sana"
+    },
+    {
+      "id": 14,
+      "title": "Two at a time, or four. Your call.",
+      "bookId": "castle",
+      "book": "We Have Always Lived in the Castle",
+      "author": "Shirley Jackson",
+      "cover": "#3B2C4A",
+      "accent": "#C9A2E8",
+      "source": "team",
+      "event": "Plans",
+      "format": "image",
+      "platform": "Facebook",
+      "stage": "scheduled",
+      "version": 1,
+      "day": 1,
+      "time": "12:30",
+      "approvedBy": "Omar"
+    },
+    {
+      "id": 15,
+      "title": "Banned, and still in stock",
+      "bookId": "beloved",
+      "book": "Beloved",
+      "author": "Toni Morrison",
+      "cover": "#6B2E1F",
+      "accent": "#E39B5C",
+      "source": "calendar",
+      "event": "Banned Books Week",
+      "format": "carousel",
+      "platform": "Instagram",
+      "stage": "scheduled",
+      "version": 1,
+      "day": 0,
+      "time": "11:00",
+      "approvedBy": "Sana",
+      "error": "Instagram login expired"
+    },
+    {
+      "id": 16,
+      "title": "Weekend reading pile",
+      "bookId": "rebecca",
+      "book": "Rebecca",
+      "author": "Daphne du Maurier",
+      "cover": "#5A1F2B",
+      "accent": "#D9A441",
+      "source": "calendar",
+      "event": "Cozy October",
+      "format": "image",
+      "platform": "Facebook",
+      "stage": "scheduled",
+      "version": 1,
+      "day": 2,
+      "time": "10:00",
+      "approvedBy": "Omar"
+    },
+    {
+      "id": 17,
+      "title": "One chapter before breakfast",
+      "bookId": "moscow",
+      "book": "A Gentleman in Moscow",
+      "author": "Amor Towles",
+      "cover": "#1F4E5A",
+      "accent": "#E0A43A",
+      "source": "team",
+      "event": "Team topic",
+      "format": "video",
+      "platform": "Instagram",
+      "stage": "published",
+      "cost": 1.22,
+      "day": -1,
+      "time": "08:30",
+      "approvedBy": "Sana",
+      "reach": 8400,
+      "engagement": 5.2,
+      "clicks": 64,
+      "saves": 210
+    },
+    {
+      "id": 18,
+      "title": "Nine set texts. All in stock.",
+      "bookId": "mockingbird",
+      "book": "To Kill a Mockingbird",
+      "author": "Harper Lee",
+      "cover": "#D9C7A3",
+      "accent": "#7A4B2A",
+      "source": "calendar",
+      "event": "Back to school",
+      "format": "carousel",
+      "platform": "Facebook",
+      "stage": "published",
+      "cost": 0.64,
+      "day": -2,
+      "time": "12:30",
+      "approvedBy": "Omar",
+      "reach": 5100,
+      "engagement": 3.1,
+      "clicks": 38,
+      "saves": 95
+    },
+    {
+      "id": 19,
+      "title": "Read what they tried to ban",
+      "bookId": "beloved",
+      "book": "Beloved",
+      "author": "Toni Morrison",
+      "cover": "#6B2E1F",
+      "accent": "#E39B5C",
+      "source": "calendar",
+      "event": "Banned Books Week",
+      "format": "video",
+      "platform": "Instagram",
+      "stage": "published",
+      "cost": 1.18,
+      "day": -4,
+      "time": "18:30",
+      "approvedBy": "Sana",
+      "reach": 14200,
+      "engagement": 6.4,
+      "clicks": 131,
+      "saves": 480
+    },
+    {
+      "id": 20,
+      "title": "Rent the whole reading list",
+      "bookId": "frank",
+      "book": "Frankenstein",
+      "author": "Mary Shelley",
+      "cover": "#274060",
+      "accent": "#8FB8DE",
+      "source": "calendar",
+      "event": "Back to school",
+      "format": "carousel",
+      "platform": "Instagram",
+      "stage": "archived",
+      "archiveReason": "Expired. Event ended 15 Sep."
+    },
+    {
+      "id": 21,
+      "title": "Summer reads, one last time",
+      "bookId": "hill",
+      "book": "The Haunting of Hill House",
+      "author": "Shirley Jackson",
+      "cover": "#2B3A2F",
+      "accent": "#9FB38A",
+      "source": "calendar",
+      "event": "End of summer",
+      "format": "image",
+      "platform": "Facebook",
+      "stage": "archived",
+      "archiveReason": "Skipped by Omar"
+    }
+  ],
+  "books": {
+    "castle": {
+      "id": "castle",
+      "title": "We Have Always Lived in the Castle",
+      "author": "Shirley Jackson",
+      "format": "Paperback",
+      "stock": 18,
+      "colors": [
+        "#3B2C4A",
+        "#EFE6F5",
+        "#C9A2E8"
+      ]
+    },
+    "ledger": {
+      "id": "ledger",
+      "title": "The Quiet Ledger",
+      "author": "M. R. Hale",
+      "format": "Paperback",
+      "stock": 26,
+      "colors": [
+        "#E7D8B8",
+        "#1E2A36",
+        "#B0572F"
+      ]
+    },
+    "rebecca": {
+      "id": "rebecca",
+      "title": "Rebecca",
+      "author": "Daphne du Maurier",
+      "format": "Paperback",
+      "stock": 41,
+      "colors": [
+        "#5A1F2B",
+        "#F3E6D8",
+        "#D9A441"
+      ]
+    },
+    "hobbit": {
+      "id": "hobbit",
+      "title": "The Hobbit",
+      "author": "J. R. R. Tolkien",
+      "format": "Audiobook CD",
+      "stock": 9,
+      "colors": [
+        "#3E5A2A",
+        "#F1E7C8",
+        "#C99A3B"
+      ]
+    },
+    "beloved": {
+      "id": "beloved",
+      "title": "Beloved",
+      "author": "Toni Morrison",
+      "format": "Paperback",
+      "stock": 33,
+      "colors": [
+        "#6B2E1F",
+        "#F5E9DA",
+        "#E39B5C"
+      ]
+    },
+    "moscow": {
+      "id": "moscow",
+      "title": "A Gentleman in Moscow",
+      "author": "Amor Towles",
+      "format": "Paperback",
+      "stock": 22,
+      "colors": [
+        "#1F4E5A",
+        "#F4EBDD",
+        "#E0A43A"
+      ]
+    },
+    "dracula": {
+      "id": "dracula",
+      "title": "Dracula",
+      "author": "Bram Stoker",
+      "format": "Paperback",
+      "stock": 57,
+      "colors": [
+        "#161616",
+        "#E8E0D0",
+        "#B3202A"
+      ]
+    },
+    "hill": {
+      "id": "hill",
+      "title": "The Haunting of Hill House",
+      "author": "Shirley Jackson",
+      "format": "Audiobook CD",
+      "stock": 29,
+      "colors": [
+        "#2B3A2F",
+        "#E9E2C9",
+        "#9FB38A"
+      ]
+    },
+    "mockingbird": {
+      "id": "mockingbird",
+      "title": "To Kill a Mockingbird",
+      "author": "Harper Lee",
+      "format": "Paperback",
+      "stock": 64,
+      "colors": [
+        "#D9C7A3",
+        "#2A2118",
+        "#7A4B2A"
+      ]
+    },
+    "frank": {
+      "id": "frank",
+      "title": "Frankenstein",
+      "author": "Mary Shelley",
+      "format": "Paperback",
+      "stock": 12,
+      "colors": [
+        "#274060",
+        "#E6EEF5",
+        "#8FB8DE"
+      ]
+    }
+  },
+  "spend": {
+    "cap": 10,
+    "text": 0.84,
+    "video": 3.6,
+    "image": 1.4,
+    "efficientModel": true,
+    "week": [
+      4.1,
+      6.8,
+      5.2,
+      9.4,
+      7.7,
+      3.9
+    ]
+  },
+  "sources": {
+    "calendar": true,
+    "news": true,
+    "team": true
+  },
+  "connections": [
+    {
+      "id": "ig",
+      "name": "Instagram",
+      "purpose": "Publishing",
+      "connected": false,
+      "detail": "Login expired"
+    },
+    {
+      "id": "fb",
+      "name": "Facebook",
+      "purpose": "Publishing",
+      "connected": true
+    },
+    {
+      "id": "or",
+      "name": "OpenRouter",
+      "purpose": "Captions",
+      "connected": true
+    },
+    {
+      "id": "cr",
+      "name": "Creatify",
+      "purpose": "Avatar video",
+      "connected": true
+    },
+    {
+      "id": "pr",
+      "name": "Predis",
+      "purpose": "Images, carousels",
+      "connected": true
+    },
+    {
+      "id": "cat",
+      "name": "Catalogue",
+      "purpose": "MySQL, read only",
+      "connected": true
+    }
+  ],
+  "later": [
+    "TikTok",
+    "YouTube",
+    "Pinterest"
+  ],
+  "events": [
+    {
+      "id": 1,
+      "name": "Banned Books Week",
+      "source": "calendar",
+      "date": "21–27 Sep",
+      "days": 2,
+      "titles": 340
+    },
+    {
+      "id": 2,
+      "name": "Cozy October",
+      "source": "calendar",
+      "date": "1–31 Oct",
+      "days": 6,
+      "titles": 1180
+    },
+    {
+      "id": 3,
+      "name": "Team pick of the week",
+      "source": "team",
+      "date": "Every Monday",
+      "days": 3,
+      "titles": 1
+    },
+    {
+      "id": 4,
+      "name": "The Quiet Ledger on TV",
+      "source": "news",
+      "date": "14 Oct",
+      "days": 19,
+      "titles": 26
+    },
+    {
+      "id": 5,
+      "name": "Halloween",
+      "source": "calendar",
+      "date": "31 Oct",
+      "days": 36,
+      "titles": 910
+    }
+  ],
+  "news": {
+    "read": 17,
+    "kept": 3
+  },
+  "brand": {
+    "voice": "Calm, plain and specific. Short sentences. Talk to one reader, not a crowd. Never sound like a shop trying to be clever.",
+    "never": [
+      "Invent a review or testimonial",
+      "Say a title is in stock without checking",
+      "Use fake urgency or countdowns",
+      "Promise a delivery date",
+      "Offer a discount a person did not approve"
+    ],
+    "styles": [
+      {
+        "format": "video",
+        "name": "Reader voice",
+        "guidance": "One person in a normal room, talking to camera. The book is held, not displayed. Under 30 seconds."
+      },
+      {
+        "format": "carousel",
+        "name": "Cover-forward",
+        "guidance": "The real cover fills most of each slide. One short line of text. No stock photos."
+      },
+      {
+        "format": "image",
+        "name": "Quiet editorial",
+        "guidance": "Lots of empty space. One cover, small and off centre. One plain line."
+      }
+    ],
+    "reference": {
+      "postId": 19,
+      "note": "3x more saves than average"
+    }
+  },
+  "team": [
+    {
+      "id": 1,
+      "name": "Sana Malik",
+      "initials": "SM",
+      "email": "sana@booklender.example",
+      "role": "Super admin",
+      "modules": [
+        "Board",
+        "Ideas",
+        "Review",
+        "Schedule",
+        "Results",
+        "Sources",
+        "Brand",
+        "AI spend",
+        "Team",
+        "Logs"
+      ]
+    },
+    {
+      "id": 2,
+      "name": "Omar Shah",
+      "initials": "OS",
+      "email": "omar@booklender.example",
+      "role": "Approver",
+      "modules": [
+        "Board",
+        "Ideas",
+        "Review",
+        "Schedule",
+        "Results",
+        "Logs"
+      ]
+    },
+    {
+      "id": 3,
+      "name": "Hina Raza",
+      "initials": "HR",
+      "email": "hina@booklender.example",
+      "role": "Editor",
+      "modules": [
+        "Board",
+        "Ideas",
+        "Schedule",
+        "Sources",
+        "Brand",
+        "Logs"
+      ]
+    }
+  ],
+  "activity": [
+    {
+      "id": 1,
+      "at": "11:00",
+      "actor": "System",
+      "level": "error",
+      "message": "Post failed: Banned, and still in stock",
+      "cause": "Instagram logged us out. Meta does this every 60 days.",
+      "fix": "Reconnect Instagram. The post retries by itself.",
+      "connectionId": "ig"
+    },
+    {
+      "id": 2,
+      "at": "10:42",
+      "actor": "Sana",
+      "level": "success",
+      "message": "Approved: Longer nights, longer books"
+    },
+    {
+      "id": 3,
+      "at": "09:15",
+      "actor": "System",
+      "level": "warning",
+      "message": "Predis was slow. One image took 6 minutes.",
+      "cause": "Predis was busy.",
+      "fix": "Nothing to do. It finished."
+    },
+    {
+      "id": 4,
+      "at": "06:05",
+      "actor": "AI",
+      "level": "info",
+      "message": "Suggested 5 ideas from Calendar, News and Team. Cost $0.05."
+    },
+    {
+      "id": 5,
+      "at": "06:00",
+      "actor": "System",
+      "level": "info",
+      "message": "Morning run started. Catalogue synced: 300,412 titles."
+    },
+    {
+      "id": 6,
+      "at": "Yesterday 08:30",
+      "actor": "System",
+      "level": "success",
+      "message": "Published on Instagram: One chapter before breakfast"
+    }
+  ],
+  "summary": {
+    "ideas": 5,
+    "picked": 2,
+    "made": 3,
+    "approved": 2,
+    "published": 1,
+    "errors": 1
+  },
+  "results": {
+    "posts": 24,
+    "kpi": {
+      "reach": [
+        212400,
+        189300
+      ],
+      "impressions": [
+        318600,
+        296100
+      ],
+      "er": [
+        4.6,
+        3.9
+      ],
+      "clicks": [
+        1240,
+        1010
+      ],
+      "followers": [
+        186,
+        142
+      ]
+    },
+    "weeks": [
+      {
+        "label": "3 Aug",
+        "value": 18.2
+      },
+      {
+        "label": "10 Aug",
+        "value": 21.5
+      },
+      {
+        "label": "17 Aug",
+        "value": 19.8
+      },
+      {
+        "label": "24 Aug",
+        "value": 24.1
+      },
+      {
+        "label": "31 Aug",
+        "value": 22.6
+      },
+      {
+        "label": "7 Sep",
+        "value": 27.3
+      },
+      {
+        "label": "14 Sep",
+        "value": 25
+      },
+      {
+        "label": "21 Sep",
+        "value": 31.4
+      }
+    ],
+    "byFormat": [
+      {
+        "format": "video",
+        "engagement": 5.8
+      },
+      {
+        "format": "carousel",
+        "engagement": 4.9
+      },
+      {
+        "format": "image",
+        "engagement": 2.7
+      }
+    ],
+    "byPlatform": [
+      {
+        "platform": "Instagram",
+        "engagement": 5.1
+      },
+      {
+        "platform": "Facebook",
+        "engagement": 3.2
+      }
+    ],
+    "best": "Weekdays 18:00 to 20:00",
+    "learned": [
+      {
+        "title": "Video gets 2x the engagement of an image",
+        "use": "More video in the next batch"
+      },
+      {
+        "title": "Posts at 18:00 to 20:00 reach the most people",
+        "use": "New posts default to 18:30"
+      },
+      {
+        "title": "Cover-forward carousels get the most saves",
+        "use": "Used for book lists"
+      },
+      {
+        "title": "Facebook reach is falling for 5 weeks",
+        "use": "Fewer Facebook posts next week"
+      }
+    ]
+  },
+  "faq": [
+    {
+      "q": "Can a post go live without approval?",
+      "a": "No. Every post waits in Review until a person approves it."
+    },
+    {
+      "q": "What happens at the daily AI limit?",
+      "a": "AI stops making new content until tomorrow. Posts that are already approved still go out."
+    },
+    {
+      "q": "Why did a post fail?",
+      "a": "Open Logs. Every error shows the cause and a button to fix it, such as Reconnect."
+    },
+    {
+      "q": "How do I add my own idea?",
+      "a": "Go to Ideas and type it in Add topic. It joins the board like any AI idea."
+    },
+    {
+      "q": "What does a post cost to make?",
+      "a": "You see the real cost once it is made. OpenRouter reports the caption cost and Creatify or Predis report the media cost. Each post gets up to 3 versions."
+    },
+    {
+      "q": "Where do the book details come from?",
+      "a": "From the BookLender catalogue database, read only. About 300,000 titles, with covers and stock."
+    }
+  ],
+  "videos": [
+    {
+      "title": "Your first approval",
+      "duration": "2:10",
+      "bookId": "moscow"
+    },
+    {
+      "title": "Reading the board",
+      "duration": "3:05",
+      "bookId": "rebecca"
+    },
+    {
+      "title": "Fixing a failed post",
+      "duration": "1:40",
+      "bookId": "frank"
+    },
+    {
+      "title": "Setting brand rules",
+      "duration": "2:30",
+      "bookId": "hill"
+    }
+  ]
+}

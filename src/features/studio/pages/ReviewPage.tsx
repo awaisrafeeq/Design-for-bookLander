@@ -1,0 +1,23 @@
+'use client';
+import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
+import { useEffect, useState } from 'react';
+import { useStudio } from '../components/StudioProvider';
+import { Chip, Cover, Empty, FormatChip, Icon, Media, Who, money } from '../components/Design';
+import { dayLabel, getBook, revisionReasons } from '../domain';
+
+export default function ReviewPage() {
+  const search=useSearchParams(); const {state,command,pending}=useStudio();
+  const [selectedId,setSelectedId]=useState<number|null>(null); const [revising,setRevising]=useState(false); const [reason,setReason]=useState(''); const [note,setNote]=useState('');
+  useEffect(()=>{const query=Number(search.get('post'));if(query)setSelectedId(query)},[search]);
+  const queue=state.posts.filter(post=>post.stage==='review'); const waiting=state.posts.filter(post=>post.stage==='revision');
+  if(!queue.length)return <div className="card empty"><span className="ring"><Icon name="check"/></span><h2>All caught up</h2><span>Nothing is waiting for approval.</span>{waiting.length>0 && <span className="small">{waiting.length} being remade by AI</span>}<Link className="btn" href="/ideas">Pick ideas</Link></div>;
+  const post=queue.find(item=>item.id===selectedId)||queue[0]; const book=getBook(state,post.bookId); const version=post.version||1;
+  const last=post.history?.at(-1);
+  const act=(action:string)=>{void command('posts',{action,id:post.id,version:post.version}).then(ok=>{if(ok)setRevising(false)})};
+  return <div className="rv"><div className="rq">{queue.map(item=><button key={item.id} className={`q ${item.id===post.id?'on':''}`} onClick={()=>{setSelectedId(item.id);setRevising(false)}}><Cover bookId={item.bookId}/><span className="t"><b>{item.title}</b><small>{item.format[0].toUpperCase()+item.format.slice(1)} · {item.platform}{(item.version||1)>1?` · v${item.version}`:''}</small></span></button>)}{waiting.map(item=><div className="q wait" key={item.id}><Cover bookId={item.bookId}/><span className="t"><b>{item.title}</b><small style={{color:'var(--ai)'}}>AI is making v{item.version}</small></span></div>)}</div>
+    <div className="stage"><div className="post"><div className="ph"><span className="av">BL</span>booklender<span className="muted" style={{fontWeight:500}}>· {post.platform}</span><Who kind={post.human ? 'team' : 'ai'}/></div><div className={`media ${post.format==='video'?'video':'sq'}`}><Media post={post}/></div><div className="cp"><span>{post.caption}</span><em>{post.tags}</em></div></div></div>
+    <div className="decide"><h2>{post.title}</h2><div style={{display:'flex',gap:6,flexWrap:'wrap'}}><FormatChip post={post}/><Chip><Icon name="clock"/>{dayLabel(post.day)} · {post.time}</Chip></div><div className="verdots">{[1,2,3].map(index=><i key={index} className={index<=version?'f':''}/>)}<span style={{marginLeft:6}}>Version {version} of 3</span>{post.cost!=null && <span className="cost">AI cost {money(post.cost)}</span>}</div>{last && <div className="hist"><b>You asked: {last.reason}</b>{last.note && <><br/>“{last.note}”</>}</div>}<div className="card pad checks"><div><span className="k w"><Icon name="alert"/></span>Check copy against brand voice</div><div><span className={`k ${post.warning?'w':''}`}><Icon name={post.warning?'alert':'check'}/></span>{post.warning||'Brand-rule checks are not automated yet'}</div><div><span className="k w"><Icon name="alert"/></span>Availability not verified</div></div>
+      {revising?<div className="card pad sec"><b>What should change?</b><div className="reasons">{revisionReasons.map(value=><button key={value} className={reason===value?'on':''} onClick={()=>setReason(value)}>{value}</button>)}</div><input placeholder="One line for the AI (optional)" aria-label="Note for the AI" value={note} onChange={event=>setNote(event.target.value)}/><div className="dact"><button className="btn ghost" onClick={()=>{setRevising(false);setReason('')}}>Back</button><button className="btn ai" disabled={!reason||pending} onClick={()=>void command('posts',{action:'revise',id:post.id,reason,note}).then(ok=>{if(ok){setRevising(false);setNote('');setReason('')}})}><Icon name="spark"/>Send to AI</button></div></div>:<div className="acts3"><button className="btn ok lg" disabled={pending} onClick={()=>act('approve')}><Icon name="check"/>Approve</button><button className="btn ghost lg" disabled={version>=3||pending} onClick={()=>setRevising(true)}><Icon name="edit"/>Revise</button><button className="btn danger lg" disabled={pending} onClick={()=>act('reject')}><Icon name="x"/>Reject</button></div>}<div className="lockline"><Icon name="lock"/>Nothing goes live until you approve</div></div>
+  </div>;
+}

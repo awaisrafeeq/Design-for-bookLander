@@ -1,0 +1,9 @@
+@import "../features/studio/styles/foundation.css";
+@import "../features/studio/styles/workflow.css";
+@import "../features/studio/styles/results.css";
+@import "../features/studio/styles/settings.css";
+@import "../features/studio/styles/support.css";
+@import "../features/studio/styles/responsive.css";
+
+a{color:inherit;text-decoration:none}
+[hidden]{display:none!important}

@@ -1,0 +1,35 @@
+import type { Book, Format, Post, StudioState, TeamMember } from './types';
+export const stages = [
+  { id: 'idea', label: 'Ideas', who: 'both', hint: 'AI suggests. Team adds.' },
+  { id: 'selected', label: 'Selected', who: 'team', hint: 'Team picks. Rest dropped.' },
+  { id: 'generating', label: 'Generating', who: 'ai', hint: 'Video, image, caption.' },
+  { id: 'review', label: 'Review', who: 'team', hint: 'Approve, revise, reject.' },
+  { id: 'revision', label: 'Revision', who: 'both', hint: 'Edit, regenerate, return.' },
+  { id: 'scheduled', label: 'Scheduled', who: 'auto', hint: 'Posts at the set time.' },
+] as const;
+export const formats: Record<Format, { label: string; icon: string; tool: string; cost: number }> = {
+  video: { label: 'Video', icon: 'play', tool: 'Creatify', cost: 1.2 },
+  carousel: { label: 'Carousel', icon: 'stack', tool: 'Predis', cost: .6 },
+  image: { label: 'Image', icon: 'image', tool: 'Predis', cost: .3 },
+};
+export const sources = { calendar: { label: 'Calendar', icon: 'cal' }, news: { label: 'News', icon: 'news' }, team: { label: 'Team', icon: 'user' } };
+export const owners = { ai: { label: 'AI', icon: 'spark' }, team: { label: 'Team', icon: 'user' }, both: { label: 'AI + Team', icon: 'spark' }, auto: { label: 'Automatic', icon: 'clock' } };
+export const modules = ['Board', 'Ideas', 'Review', 'Schedule', 'Results', 'Sources', 'Brand', 'AI spend', 'Team', 'Logs'];
+export const roles: Record<TeamMember['role'], string[]> = { 'Super admin': modules, 'Campaigns manager': ['Board', 'Ideas', 'Review', 'Schedule', 'Results', 'Sources', 'Brand', 'AI spend', 'Logs'], Approver: ['Board', 'Ideas', 'Review', 'Schedule', 'Results', 'Logs'], Editor: ['Board', 'Ideas', 'Schedule', 'Sources', 'Brand', 'Logs'], Viewer: ['Board', 'Schedule', 'Results'] };
+export const revisionReasons = ['The copy', 'The look', 'Wrong title', 'Off brand', 'Something else'];
+export const fallbackBook: Book = { id: 'team', title: 'Team topic', author: 'BookLender', colors: ['#44546A', '#F2F2F2', '#F2C14E'] };
+export const getBook = (state: StudioState, id: string | null) => state.books[id || ''] || fallbackBook;
+export const money = (n: number) => '$' + n.toFixed(2);
+export const used = (state: StudioState) => state.spend.text + state.spend.video + state.spend.image;
+export const spendStatus = (state: StudioState) => used(state) >= state.spend.cap ? 'stop' : used(state) / state.spend.cap >= .8 ? 'near' : 'ok';
+export const atRisk = (post: Post) => !['published', 'archived', 'scheduled'].includes(post.stage) && post.eventDays != null && post.eventDays <= 3;
+export const byTime = (a: Post, b: Post) => ((a.day || 0) - (b.day || 0)) || String(a.time).localeCompare(String(b.time));
+export function dayParts(offset = 0) {
+  const date = new Date();
+  date.setDate(date.getDate() + offset);
+  return { wd: date.toLocaleDateString('en-US', { weekday: 'short' }), d: date.getDate(), m: date.toLocaleDateString('en-US', { month: 'short' }) };
+}
+export function dayLabel(offset = 0) {
+  if (!offset) return 'Today'; if (offset === 1) return 'Tomorrow'; if (offset === -1) return 'Yesterday';
+  const p = dayParts(offset); return `${p.wd} ${p.d} ${p.m}`;
+}

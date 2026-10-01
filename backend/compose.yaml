@@ -1,0 +1,149 @@
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: booklender
+      POSTGRES_USER: booklender
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in backend/.env}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U booklender -d booklender"]
+      interval: 5s
+      timeout: 3s
+      retries: 15
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 15
+    restart: unless-stopped
+
+  api:
+    build: .
+    environment:
+      APP_ENV: ${APP_ENV:-development}
+      APP_NAME: ${APP_NAME:-BookLender Studio API}
+      API_PREFIX: ${API_PREFIX:-/api/v1}
+      DATABASE_URL: postgresql+psycopg://booklender:${POSTGRES_PASSWORD}@db:5432/booklender
+      REDIS_URL: redis://redis:6379/0
+      SESSION_COOKIE_NAME: ${SESSION_COOKIE_NAME:-bl_session}
+      SESSION_TTL_HOURS: ${SESSION_TTL_HOURS:-12}
+      AUTH_LOGIN_MAX_ATTEMPTS: ${AUTH_LOGIN_MAX_ATTEMPTS:-10}
+      AUTH_LOGIN_WINDOW_SECONDS: ${AUTH_LOGIN_WINDOW_SECONDS:-900}
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
+      ALLOWED_ORIGINS: '${ALLOWED_ORIGINS}'
+      BOOKLENDER_TIMEZONE: ${BOOKLENDER_TIMEZONE:-America/New_York}
+      AI_DAILY_SPEND_CAP_USD: ${AI_DAILY_SPEND_CAP_USD:-5}
+    command: ["sh", "-c", "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000"]
+    ports:
+      - "127.0.0.1:8001:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/ready', timeout=2)"]
+      interval: 10s
+      timeout: 4s
+      retries: 12
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    environment:
+      NODE_ENV: production
+      BOOKLENDER_API_URL: http://api:8000/api/v1
+    ports:
+      - "127.0.0.1:3000:3000"
+    depends_on:
+      api:
+        condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:3000/login || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+    restart: unless-stopped
+
+  proxy:
+    image: caddy:2-alpine
+    environment:
+      BOOKLENDER_DOMAIN: ${BOOKLENDER_DOMAIN:?Set BOOKLENDER_DOMAIN in backend/.env}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      frontend:
+        condition: service_healthy
+    restart: unless-stopped
+
+  worker:
+    build: .
+    environment:
+      APP_ENV: ${APP_ENV:-development}
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
+      DATABASE_URL: postgresql+psycopg://booklender:${POSTGRES_PASSWORD}@db:5432/booklender
+      REDIS_URL: redis://redis:6379/0
+      BOOKLENDER_TIMEZONE: ${BOOKLENDER_TIMEZONE:-America/New_York}
+    command: ["celery", "-A", "app.worker:celery_app", "worker", "--loglevel=INFO"]
+    depends_on:
+      api:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  scheduler:
+    build: .
+    environment:
+      APP_ENV: ${APP_ENV:-development}
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
+      DATABASE_URL: postgresql+psycopg://booklender:${POSTGRES_PASSWORD}@db:5432/booklender
+      REDIS_URL: redis://redis:6379/0
+      BOOKLENDER_TIMEZONE: ${BOOKLENDER_TIMEZONE:-America/New_York}
+    command: ["celery", "-A", "app.worker:celery_app", "beat", "--loglevel=INFO"]
+    depends_on:
+      api:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  bootstrap:
+    build: .
+    profiles: ["setup"]
+    environment:
+      APP_ENV: ${APP_ENV:-development}
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
+      DATABASE_URL: postgresql+psycopg://booklender:${POSTGRES_PASSWORD}@db:5432/booklender
+      REDIS_URL: redis://redis:6379/0
+      BOOTSTRAP_ADMIN_EMAIL: ${BOOTSTRAP_ADMIN_EMAIL:-}
+      BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD:-}
+      BOOKLENDER_TIMEZONE: ${BOOKLENDER_TIMEZONE:-America/New_York}
+      AI_DAILY_SPEND_CAP_USD: ${AI_DAILY_SPEND_CAP_USD:-5}
+    command: ["python", "-m", "app.bootstrap"]
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
+  redis_data:
+  caddy_data:
+  caddy_config:

@@ -1,0 +1,20 @@
+'use client';
+import { useState } from 'react';
+import { useStudio } from '../components/StudioProvider';
+import { Cover, DueChip, Icon, Meta, SourceChip, VersionChip, Who } from '../components/Design';
+import { atRisk, dayLabel, formats, stages } from '../domain';
+import type { Post } from '../types';
+
+function KanbanCard({ post, onOpen }: { post: Post; onOpen: () => void }) {
+  const status = ['generating','revision'].includes(post.stage) ? <><div className="prog"><i style={{width:`${post.progress || 20}%`}}/></div><span className="stat" style={{color:'var(--ai)'}}>{post.stage==='revision'?`Making v${post.version}`:`Making ${formats[post.format].label.toLowerCase()}`}</span></> : post.stage==='scheduled' ? post.error ? <span className="stat bad"><Icon name="alert"/>{post.error}</span> : <span className="stat"><Icon name="clock"/>{dayLabel(post.day)}, {post.time}<span className="muted">by {post.approvedBy}</span></span> : null;
+  return <button className={`kc ${!post.human&&['idea','generating','revision'].includes(post.stage)?'ai':''} ${atRisk(post)?'risk':''} ${post.error?'fail':''}`} onClick={onOpen}><span className="hd"><Cover bookId={post.bookId}/><b>{post.title}</b></span><Meta post={post}/>{status}<span className="ft">{post.stage==='idea' && <SourceChip post={post}/>}<DueChip post={post}/><VersionChip post={post}/></span></button>;
+}
+export default function BoardPage() {
+  const { state, openPost, command, pending } = useStudio();
+  const [platform, setPlatform] = useState(''); const [risk, setRisk] = useState(false); const [archive, setArchive] = useState(false); const [column, setColumn] = useState('review');
+  const cards = state.posts.filter(post=>(!platform||post.platform===platform)&&(!risk||atRisk(post)));
+  const archived = state.posts.filter(post=>post.stage==='archived');
+  const tools = <div className="tools">{[['','All'],['Instagram','Instagram'],['Facebook','Facebook']].map(([value,label])=><button key={label} className={`fchip ${platform===value?'on':''}`} onClick={()=>setPlatform(value)}>{label}</button>)}<button className={`fchip ${risk?'on':''}`} onClick={()=>setRisk(!risk)}><Icon name="clock"/>Due soon <span className="n">{state.posts.filter(atRisk).length}</span></button><button className={`fchip ${archive?'on':''}`} style={{marginLeft:'auto'}} onClick={()=>setArchive(!archive)}><Icon name="archive"/>Archive <span className="n">{archived.length}</span></button></div>;
+  if(archive) return <>{tools}<section className="sec"><div className="sechead"><h2>Archive</h2><span className="muted small">Expired, skipped or rejected. Bring any back.</span></div><div className="rows">{archived.map(post=><div className="rowi" key={post.id}><Cover bookId={post.bookId}/><span className="t"><b>{post.title}</b><small>{post.archiveReason}</small></span><button className="btn sm ghost" disabled={pending} onClick={()=>void command('posts',{action:'restore',id:post.id})}><Icon name="retry"/>Reactivate</button></div>)}</div></section></>;
+  return <>{tools}<div className="kbtabs">{stages.map(stage=><button key={stage.id} className={`fchip ${column===stage.id?'on':''}`} onClick={()=>setColumn(stage.id)}>{stage.label} <span className="n">{cards.filter(post=>post.stage===stage.id).length}</span></button>)}</div><div className="kb">{stages.map(stage=>{const posts=cards.filter(post=>post.stage===stage.id);return <section key={stage.id} className={`kcol ${stage.id==='review'?'need':''} ${column===stage.id?'cur':''}`} aria-label={stage.label}><div className="khead"><div className="a"><b>{stage.label}</b><span className="n">{posts.length}</span></div><div className="a"><Who kind={stage.who}/></div><small>{stage.hint}</small></div><div className="kbody">{posts.length?posts.map(post=><KanbanCard key={post.id} post={post} onOpen={()=>openPost(post.id)}/>):<div className="kempty">Nothing here</div>}</div></section>})}</div><div className="notes"><span><Icon name="retry"/>Revise goes back to Review until it is right</span><span><Icon name="archive"/>Not acted on by the date? It moves to Archive</span><span><Icon name="chart"/>Published posts move to Results</span></div></>;
+}
