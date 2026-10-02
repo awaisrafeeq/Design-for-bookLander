@@ -152,10 +152,13 @@ def execute_media(db, job, post):
         urls = [response["output"]] if status in {"done", "completed", "success"} and response.get("output") else []
         job.result = {"credits": response.get("credits_used")}
     else:
-        response = predis_result(job.provider_id)
+        response = predis_result(job.provider_id, post.payload.get("format", "image"))
         if response and str(response.get("status", "")).lower() in {"error", "failed"}:
             raise ValueError("Predis image generation failed. Check the provider post and available credits, then retry.")
         urls = response.get("urls", []) if response else []
+        if not urls and response:
+            urls = [entry.get("url") for entry in response.get("generated_media", [])
+                    if isinstance(entry, dict) and entry.get("url")]
     if not urls:
         if datetime.now(UTC) - job.created_at > timedelta(hours=2):
             raise ValueError("Generation is taking longer than two hours. Inspect the provider job, then retry status sync.")

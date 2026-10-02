@@ -100,11 +100,13 @@ def predis_create(brief: str, format_name: str):
     return response["post_ids"][0]
 
 
-def predis_result(post_id: str):
+def predis_result(post_id: str, format_name: str):
+    media_type = "carousel" if format_name == "carousel" else "single_image"
     for page in range(1, 51):
         response = call("Predis", "GET", "https://brain.predis.ai/predis_api/v1/get_posts/",
             headers={"Authorization": settings.predis_api_key},
-            params={"brand_id": settings.predis_brand_id, "page_n": page, "items_n": 20})
+            params={"brand_id": settings.predis_brand_id, "media_type": media_type,
+                    "page_n": page, "items_n": 20})
         if response.get("errors"):
             raise ProviderError("Predis", 400)
         for post in response.get("posts", []):
