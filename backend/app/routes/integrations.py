@@ -1,6 +1,7 @@
 import hashlib
 import hmac
 import json
+from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile, File, Form
@@ -105,4 +106,38 @@ async def zernio_webhook(request: Request, db=Depends(get_db)):
         raise HTTPException(422, "Invalid webhook event") from None
     db.execute(insert(WebhookInbox).values(id=identifier, payload=payload, processed=False).on_conflict_do_nothing(index_elements=["id"]))
     db.commit()
+    return {"accepted": True}
+
+
+@router.post("/webhooks/predis")
+async def predis_webhook(request: Request, db=Depends(get_db)):
+    """Wake the media poller when Predis completes a generation.
+
+    Predis documents no signature header and sends each terminal callback once.
+    Treat the callback as a notification only: the worker fetches authoritative
+    state from Predis before changing the post or attaching media.
+    """
+    body = await request.body()
+    if len(body) > 1024 * 1024:
+        raise HTTPException(413, "Webhook too large")
+    try:
+        payload = json.loads(body)
+        post_id = payload["post_id"]
+        status = payload["status"]
+        if not isinstance(post_id, str) or not post_id or len(post_id) > 160:
+            raise ValueError()
+        if status not in {"completed", "error"}:
+            raise ValueError()
+    except (ValueError, KeyError, TypeError):
+        raise HTTPException(422, "Invalid Predis webhook event") from None
+
+    # Never trust callback contents as media/status data. Only wake the job;
+    # the worker will fetch the post through the authenticated Predis API.
+    job = db.scalar(select(WorkJob).where(
+        WorkJob.provider == "Predis", WorkJob.kind == "media",
+        WorkJob.provider_id == post_id, WorkJob.status.in_(ACTIVE),
+    ).with_for_update())
+    if job:
+        job.next_run = datetime.now(UTC)
+        db.commit()
     return {"accepted": True}

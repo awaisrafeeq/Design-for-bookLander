@@ -153,6 +153,8 @@ def execute_media(db, job, post):
         job.result = {"credits": response.get("credits_used")}
     else:
         response = predis_result(job.provider_id)
+        if response and str(response.get("status", "")).lower() in {"error", "failed"}:
+            raise ValueError("Predis image generation failed. Check the provider post and available credits, then retry.")
         urls = response.get("urls", []) if response else []
     if not urls:
         if datetime.now(UTC) - job.created_at > timedelta(hours=2):
