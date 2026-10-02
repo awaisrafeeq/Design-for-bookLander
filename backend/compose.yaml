@@ -1,3 +1,25 @@
+x-provider-environment: &provider-environment
+  OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+  OPENROUTER_MODEL: ${OPENROUTER_MODEL:-}
+  ZERNIO_API_KEY: ${ZERNIO_API_KEY:-}
+  ZERNIO_PROFILE_ID: ${ZERNIO_PROFILE_ID:-}
+  ZERNIO_WEBHOOK_SECRET: ${ZERNIO_WEBHOOK_SECRET:-}
+  PREDIS_API_KEY: ${PREDIS_API_KEY:-}
+  PREDIS_BRAND_ID: ${PREDIS_BRAND_ID:-}
+  CREATIFY_API_ID: ${CREATIFY_API_ID:-}
+  CREATIFY_API_KEY: ${CREATIFY_API_KEY:-}
+  CREATIFY_AVATAR_ID: ${CREATIFY_AVATAR_ID:-}
+  PUBLIC_APP_URL: ${PUBLIC_APP_URL:-https://booklender.tech}
+  MEDIA_ROOT: /data/media
+  MEDIA_SIGNING_KEY: ${MEDIA_SIGNING_KEY:-}
+  MEDIA_MAX_UPLOAD_MB: ${MEDIA_MAX_UPLOAD_MB:-100}
+  SMTP_HOST: ${SMTP_HOST:-}
+  SMTP_PORT: ${SMTP_PORT:-587}
+  SMTP_USERNAME: ${SMTP_USERNAME:-}
+  SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+  SMTP_FROM: ${SMTP_FROM:-}
+  SMTP_SECURITY: ${SMTP_SECURITY:-starttls}
+
 services:
   redis:
     image: redis:7-alpine
@@ -14,6 +36,7 @@ services:
   api:
     build: .
     environment:
+      <<: *provider-environment
       APP_ENV: ${APP_ENV:-development}
       APP_NAME: ${APP_NAME:-BookLender Studio API}
       API_PREFIX: ${API_PREFIX:-/api/v1}
@@ -27,7 +50,9 @@ services:
       ALLOWED_ORIGINS: '${ALLOWED_ORIGINS}'
       BOOKLENDER_TIMEZONE: ${BOOKLENDER_TIMEZONE:-America/New_York}
       AI_DAILY_SPEND_CAP_USD: ${AI_DAILY_SPEND_CAP_USD:-5}
-    command: ["sh", "-c", "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000"]
+    command: ["sh", "-c", "alembic upgrade head && python -m app.seed_team && uvicorn app.main:app --host 0.0.0.0 --port 8000"]
+    volumes:
+      - media_data:/data/media
     ports:
       - "127.0.0.1:8001:8000"
     depends_on:
@@ -82,12 +107,15 @@ services:
   worker:
     build: .
     environment:
+      <<: *provider-environment
       APP_ENV: ${APP_ENV:-development}
       COOKIE_SECURE: ${COOKIE_SECURE:-false}
       DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL in backend/.env}
       REDIS_URL: redis://redis:6379/0
       BOOKLENDER_TIMEZONE: ${BOOKLENDER_TIMEZONE:-America/New_York}
     command: ["celery", "-A", "app.worker:celery_app", "worker", "--loglevel=INFO"]
+    volumes:
+      - media_data:/data/media
     depends_on:
       api:
         condition: service_healthy
@@ -137,6 +165,7 @@ services:
       - hostinger_postgresql
 
 volumes:
+  media_data:
   redis_data:
   caddy_data:
   caddy_config:

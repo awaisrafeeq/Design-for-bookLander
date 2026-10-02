@@ -15,6 +15,7 @@ from app.db import get_db
 from app.models import AuditEvent, AuthSession, Invitation, User
 from app.schemas import InvitationActivationRequest, LoginRequest, PasswordChangeRequest, ProfileUpdateRequest, SessionResponse, UserResponse
 from app.security import hash_password, hash_session_token, new_session_material, password_hasher, verify_password
+from app.permissions import effective_permissions
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 ROLE_MODULES = {
@@ -59,7 +60,8 @@ def user_response(user: User) -> UserResponse:
         name=user.name,
         role=user.role,
         is_approver=user.is_approver,
-        modules=user.module_access or ROLE_MODULES.get(user.role, ROLE_MODULES["viewer"]),
+        modules=user.module_access if user.role != "admin" else ROLE_MODULES["admin"],
+        permissions=effective_permissions(user),
     )
 
 

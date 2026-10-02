@@ -32,6 +32,7 @@ class UserResponse(BaseModel):
     role: str
     is_approver: bool
     modules: list[str]
+    permissions: dict[str, bool] = {}
 
 
 class SessionResponse(BaseModel):

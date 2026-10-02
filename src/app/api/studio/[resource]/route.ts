@@ -5,7 +5,7 @@ import type { StudioState } from '@/features/studio/types';
 export const dynamic = 'force-dynamic';
 type Context = { params: Promise<{ resource: string }> };
 const apiBase = process.env.BOOKLENDER_API_URL || 'http://127.0.0.1:8001/api/v1';
-const persistentResources = new Set(['brand', 'spend', 'team', 'posts', 'sources', 'logs']);
+const persistentResources = new Set(['brand', 'spend', 'team', 'posts', 'sources', 'logs', 'schedule', 'calendar', 'media']);
 
 async function isAuthenticated(request: NextRequest) {
   const cookie = request.headers.get('cookie');
@@ -18,12 +18,12 @@ async function isAuthenticated(request: NextRequest) {
   }
 }
 
-async function authenticatedUser(request: NextRequest): Promise<{ role?: string; modules?: string[]; is_approver?: boolean } | null> {
+async function authenticatedUser(request: NextRequest): Promise<{ role?: string; modules?: string[]; is_approver?: boolean; permissions?: Record<string, boolean> } | null> {
   const cookie = request.headers.get('cookie');
   if (!cookie) return null;
   try {
     const response = await fetch(`${apiBase}/auth/me`, { headers: { cookie }, cache: 'no-store' });
-    return response.ok ? await response.json() as { role?: string; modules?: string[]; is_approver?: boolean } : null;
+    return response.ok ? await response.json() as { role?: string; modules?: string[]; is_approver?: boolean; permissions?: Record<string, boolean> } : null;
   } catch {
     return null;
   }
@@ -52,14 +52,14 @@ async function backendResource(request: NextRequest, resource: string, method: '
   const cookie = request.headers.get('cookie');
   if (cookie) headers.set('cookie', cookie);
   if (method === 'POST') {
-    headers.set('content-type', 'application/json');
+    headers.set('content-type', request.headers.get('content-type') || 'application/json');
     const csrf = request.headers.get('x-csrf-token');
     if (csrf) headers.set('x-csrf-token', csrf);
   }
-  const upstream = await fetch(`${apiBase}/studio/${resource}`, {
+  const upstream = await fetch(`${apiBase}/studio/${resource}${method === 'GET' ? request.nextUrl.search : ''}`, {
     method,
     headers,
-    body: method === 'POST' ? await request.text() : undefined,
+    body: method === 'POST' ? await request.arrayBuffer() : undefined,
     cache: 'no-store',
   });
   const result = await upstream.json().catch(() => ({})) as Record<string, unknown>;
@@ -77,8 +77,8 @@ export async function GET(request: NextRequest, context: Context) {
       if (!brand.ok || !spend.ok) return NextResponse.json({ error: 'Could not load saved settings from the backend.' }, { status: 503 });
       if (!posts.ok) return NextResponse.json({ error: 'Could not load saved workflow data from the backend.' }, { status: 503 });
       if (!sources.ok) return NextResponse.json({ error: 'Could not load saved source settings from the backend.' }, { status: 503 });
-      if (!logs.ok) return NextResponse.json({ error: 'Could not load the audit log from the backend.' }, { status: 503 });
-      const [brandState, spendState, teamState, postsState, sourcesState, logsState] = await Promise.all([brand.json(), spend.json(), team.ok ? team.json() : Promise.resolve([]), posts.json(), sources.json(), logs.json()]);
+      if (!logs.ok && logs.status !== 403) return NextResponse.json({ error: 'Could not load the audit log from the backend.' }, { status: 503 });
+      const [brandState, spendState, teamState, postsState, sourcesState, logsState, user] = await Promise.all([brand.json(), spend.json(), team.ok ? team.json() : Promise.resolve([]), posts.json(), sources.json(), logs.ok ? logs.json() : Promise.resolve([]), authenticatedUser(request)]);
       const postCounts = {
         ideas: postsState.filter((post: { stage: string }) => post.stage === 'idea').length,
         picked: postsState.filter((post: { stage: string }) => post.stage === 'selected').length,
@@ -89,7 +89,7 @@ export async function GET(request: NextRequest, context: Context) {
       };
       const seed = readResource('snapshot') as StudioState;
       const emptyResults = { ...seed.results, posts: 0, kpi: { reach: [0, 0], impressions: [0, 0], er: [0, 0], clicks: [0, 0], followers: [0, 0] }, weeks: seed.results.weeks.map(item => ({ ...item, value: 0 })), byFormat: seed.results.byFormat.map(item => ({ ...item, engagement: 0 })), byPlatform: seed.results.byPlatform.map(item => ({ ...item, engagement: 0 })), best: 'Waiting for verified publishing and analytics data.', learned: [] };
-      return NextResponse.json({ ...seed, brand: brandState, spend: spendState, team: teamState, posts: postsState, activity: logsState, events: sourcesState.events, connections: sourcesState.connections, sources: sourcesState.sources, summary: postCounts, results: emptyResults }, { headers: { 'Cache-Control': 'no-store' } });
+      return NextResponse.json({ ...seed, modules: user?.modules || [], permissions: user?.permissions || {}, books: {}, videos: [], news: { read: 0, kept: 0 }, accounts: sourcesState.accounts || [], brand: brandState, spend: spendState, team: teamState, posts: postsState, activity: logsState, events: sourcesState.events, connections: sourcesState.connections, sources: sourcesState.sources, summary: postCounts, results: emptyResults }, { headers: { 'Cache-Control': 'no-store' } });
     }
     return NextResponse.json(readResource(resource), { headers: { 'Cache-Control': 'no-store' } });
   }

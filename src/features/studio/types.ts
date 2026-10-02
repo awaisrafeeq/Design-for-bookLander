@@ -20,6 +20,8 @@ export interface Post {
   version?: number;
   cost?: number;
   caption?: string;
+  script?: string;
+  mediaBrief?: string;
   tags?: string;
   warning?: string;
   note?: string;
@@ -38,13 +40,19 @@ export interface Post {
   progress?: number;
   archiveReason?: string;
   history?: { version: number; reason: string; note: string }[];
+  approvedVersion?: number;
+  media?: { id: string; type: 'image' | 'video'; url: string; mime: string; size: number }[];
+  platforms?: Platform[];
+  brandChecks?: { policyVersion: number; passed: boolean; violations: { rule: string; match: string }[]; warnings: string[] };
+  publicationStatus?: string;
+  publicationTargets?: { id: string; platform: string; status: string; postUrl?: string; error?: string }[];
 }
 
 export interface Connection { id: string; name: string; purpose: string; connected: boolean; detail?: string }
 export interface Event { id: number; name: string; source: Source; date: string; days: number; titles: number }
 export interface BrandStyle { format: Format; name: string; guidance: string }
-export interface TeamMember { id: number | string; name: string; initials: string; email: string; role: 'Super admin' | 'Campaigns manager' | 'Approver' | 'Editor' | 'Viewer'; modules: string[]; invited?: boolean; isApprover?: boolean }
-export interface Activity { id: number | string; at: string; actor: string; level: 'info' | 'success' | 'warning' | 'error'; message: string; detail?: string; cause?: string; fix?: string; connectionId?: string; done?: boolean }
+export interface TeamMember { id: number | string; name: string; initials: string; email: string; role: 'Super admin' | 'Campaigns manager' | 'Approver' | 'Editor' | 'Viewer'; modules: string[]; invited?: boolean; isApprover?: boolean; permissions?: Record<string, boolean>; roleTitles?: string[]; active?: boolean }
+export interface Activity { id: number | string; at: string; actor: string; level: 'info' | 'success' | 'warning' | 'error'; message: string; detail?: string; cause?: string; fix?: string; connectionId?: string; done?: boolean; jobId?: string; status?: string; attempts?: number; providerJobId?: string; nextRetryAt?: string; result?: { credits?: number; model?: string; usage?: { cost?: number; prompt_tokens?: number; completion_tokens?: number } }; history?: { at: string; attempt: number; status: string; cause?: string }[] }
 export interface Book { id: string; title: string; author: string; format?: string; stock?: number; colors: [string, string, string] }
 export interface ResultMetrics {
   posts: number;
@@ -56,6 +64,9 @@ export interface ResultMetrics {
   learned: { title: string; use: string }[];
 }
 export interface StudioState {
+  modules?: string[];
+  permissions?: Record<string, boolean>;
+  accounts?: { id: string; platform: string; name: string; active: boolean; selected: boolean; syncedAt: string }[];
   posts: Post[];
   books: Record<string, Book>;
   spend: { cap: number; text: number; video: number; image: number; efficientModel: boolean; week: number[] };

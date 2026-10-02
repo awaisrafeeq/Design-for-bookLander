@@ -12,10 +12,16 @@ celery_app.conf.update(
     task_acks_late=True,
     task_reject_on_worker_lost=True,
     worker_prefetch_multiplier=1,
-    beat_schedule={},
+    beat_schedule={"studio-outbox": {"task": "booklender.process_jobs", "schedule": 15.0}},
 )
 
 
 @celery_app.task(name="booklender.healthcheck")
 def healthcheck() -> str:
     return "ok"
+
+
+@celery_app.task(name="booklender.process_jobs", soft_time_limit=900, time_limit=930)
+def process_jobs():
+    from app.jobs import run_pending
+    run_pending()

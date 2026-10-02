@@ -10,5 +10,9 @@ backend/.venv/
 .env*.local
 *.tsbuildinfo
 .tmp/
+__pycache__/
+*.py[cod]
+backend/build/
+*.egg-info/
 # Client-provided documents and design references are private source material.
-docs/
+# docs/

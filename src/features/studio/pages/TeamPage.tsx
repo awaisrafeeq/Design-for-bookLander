@@ -2,6 +2,7 @@
 
 import { useState, type FormEvent } from 'react';
 import { useStudio } from '../components/StudioProvider';
+import { actionPermissions } from '../permissions';
 import { Header, Icon } from '../components/Design';
 import { modules, roles } from '../domain';
 import type { TeamMember } from '../types';
@@ -12,6 +13,8 @@ export default function TeamPage() {
   const [role, setRole] = useState<TeamMember['role']>('Campaigns manager');
   const [inviteApprover, setInviteApprover] = useState(false);
   const [inviteLink, setInviteLink] = useState('');
+  const [permissionUserId, setPermissionUserId] = useState('');
+  const permissionUser = state.team.find(member => String(member.id) === permissionUserId);
 
   async function invite(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -33,7 +36,10 @@ export default function TeamPage() {
             <span className="av2">{member.initials}</span>
             <span className="t">
               <b>{member.name}{member.invited && <span className="chip amber">Invite pending</span>}</b>
-              <small>{member.email}</small>
+              <small>{member.email}{member.roleTitles?.length ? ` · ${member.roleTitles.join(' + ')}` : ''}</small>
+              {member.invited && <button className="btn ghost sm" disabled={pending} onClick={() => void command('team', { action: 'resend', id: member.id }, result => {
+                if (typeof result.activationToken === 'string') { const link = new URL('/activate', window.location.origin); link.hash = new URLSearchParams({ token: result.activationToken }).toString(); setInviteLink(link.toString()); }
+              })}>Send / resend invitation</button>}
               <button className={`chip ${member.isApprover ? 'ai' : ''}`} disabled={pending || member.role === 'Super admin'} aria-label={`${member.isApprover ? 'Remove' : 'Make'} ${member.name} an approver`} onClick={() => void command('team', { action: 'approver', id: member.id, value: !member.isApprover })}>
                 {member.isApprover ? 'Approver · Remove' : 'Make approver'}
               </button>
@@ -53,7 +59,7 @@ export default function TeamPage() {
           </label>
           <button className="btn" disabled={pending}><Icon name="plus"/>Invite</button>
         </form>
-        {inviteLink ? <div className="card pad sec"><b>Activation link · expires in 48 hours</b><p className="small muted">Send this one-time link to the invitee through your approved secure channel.</p><div className="addtopic" style={{ maxWidth: 'none' }}><input readOnly aria-label="One-time activation link" value={inviteLink}/><button className="btn ghost" type="button" onClick={() => void navigator.clipboard.writeText(inviteLink).then(() => notify('Activation link copied')).catch(() => notify('Could not copy link', true))}><Icon name="send"/>Copy</button><button className="btn ghost" type="button" onClick={() => setInviteLink('')} aria-label="Hide activation link"><Icon name="x"/></button></div></div> : <p className="small muted">Email delivery is not configured. Copy each one-time link and send it securely.</p>}
+        {inviteLink ? <div className="card pad sec"><b>Activation link · expires in 48 hours</b><p className="small muted">Send this one-time link to the invitee through your approved secure channel.</p><div className="addtopic" style={{ maxWidth: 'none' }}><input readOnly aria-label="One-time activation link" value={inviteLink}/><button className="btn ghost" type="button" onClick={() => void navigator.clipboard.writeText(inviteLink).then(() => notify('Activation link copied')).catch(() => notify('Could not copy link', true))}><Icon name="send"/>Copy</button><button className="btn ghost" type="button" onClick={() => setInviteLink('')} aria-label="Hide activation link"><Icon name="x"/></button></div></div> : <p className="small muted">Email invitations use the configured SMTP sender. If delivery is unavailable, a one-time link is provided.</p>}
       </section>
       <section className="card pad sec">
         <Header title="Ready-made roles"/>
@@ -63,6 +69,11 @@ export default function TeamPage() {
         </div>)}</div>
       </section>
     </div>
+    <section className="card pad sec">
+      <Header title="Action permissions"/>
+      <select aria-label="Choose a person to manage permissions" value={permissionUserId} onChange={event => setPermissionUserId(event.target.value)}><option value="">Choose a person</option>{state.team.map(member => <option key={member.id} value={member.id}>{member.name}</option>)}</select>
+      {permissionUser && <><p className="small muted">Module access and action permission must both be enabled.</p><div className="permission-grid">{Object.entries(actionPermissions).map(([key, label]) => <label key={key}><input type="checkbox" checked={permissionUser.permissions?.[key] || permissionUser.role === 'Super admin'} disabled={pending || permissionUser.role === 'Super admin'} onChange={event => void command('team', { action: 'permission', id: permissionUser.id, permission: key, value: event.target.checked })}/>{label}</label>)}</div></>}
+    </section>
     <section className="card pad sec">
       <Header title="Who can open what"><span className="small muted r">Tap a box to change</span></Header>
       <div className="tblwrap"><table className="tbl mx">

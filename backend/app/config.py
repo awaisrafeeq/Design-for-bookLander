@@ -23,6 +23,26 @@ class Settings(BaseSettings):
     bootstrap_admin_password: str | None = None
     booklender_timezone: str = "America/New_York"
     ai_daily_spend_cap_usd: float = 5.0
+    openrouter_api_key: str = ""
+    openrouter_model: str = ""
+    zernio_api_key: str = ""
+    zernio_profile_id: str = ""
+    zernio_webhook_secret: str = ""
+    predis_api_key: str = ""
+    predis_brand_id: str = ""
+    creatify_api_id: str = ""
+    creatify_api_key: str = ""
+    creatify_avatar_id: str = ""
+    public_app_url: str = ""
+    media_root: str = "/data/media"
+    media_signing_key: str = ""
+    media_max_upload_mb: int = 100
+    smtp_host: str = ""
+    smtp_port: int = 587
+    smtp_username: str = ""
+    smtp_password: str = ""
+    smtp_from: str = ""
+    smtp_security: Literal["starttls", "ssl"] = "starttls"
 
     @field_validator("session_ttl_hours")
     @classmethod

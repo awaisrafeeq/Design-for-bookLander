@@ -4,6 +4,7 @@
 @import "../features/studio/styles/settings.css";
 @import "../features/studio/styles/support.css";
 @import "../features/studio/styles/responsive.css";
+@import "../features/studio/styles/integrations.css";
 
 a{color:inherit;text-decoration:none}
 [hidden]{display:none!important}

@@ -25,6 +25,8 @@ class User(Base):
     invited: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     is_approver: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     module_access: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    permissions: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    role_titles: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
@@ -138,3 +140,68 @@ class SourceSetting(Base):
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     updated_by: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"))
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+
+
+class WorkJob(Base):
+    __tablename__ = "work_jobs"
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    kind: Mapped[str] = mapped_column(String(40), nullable=False)
+    provider: Mapped[str] = mapped_column(String(40), nullable=False)
+    post_id: Mapped[int | None] = mapped_column(ForeignKey("studio_posts.id", ondelete="SET NULL"), index=True)
+    actor_id: Mapped[UUID | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
+    status: Mapped[str] = mapped_column(String(24), nullable=False, default="queued", index=True)
+    payload: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    result: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    provider_id: Mapped[str | None] = mapped_column(String(160))
+    attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    history: Mapped[list[dict]] = mapped_column(JSON, nullable=False, default=list)
+    cause: Mapped[str | None] = mapped_column(Text)
+    fix: Mapped[str | None] = mapped_column(Text)
+    next_run: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
+class MediaAsset(Base):
+    __tablename__ = "media_assets"
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    post_id: Mapped[int] = mapped_column(ForeignKey("studio_posts.id", ondelete="CASCADE"), index=True)
+    kind: Mapped[str] = mapped_column(String(10))
+    mime: Mapped[str] = mapped_column(String(80))
+    filename: Mapped[str] = mapped_column(String(100))
+    size: Mapped[int] = mapped_column(Integer)
+    metadata_json: Mapped[dict] = mapped_column(JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class ProviderAccount(Base):
+    __tablename__ = "provider_accounts"
+    id: Mapped[str] = mapped_column(String(80), primary_key=True)
+    platform: Mapped[str] = mapped_column(String(40), index=True)
+    name: Mapped[str] = mapped_column(String(180))
+    active: Mapped[bool] = mapped_column(Boolean, default=False)
+    selected: Mapped[bool] = mapped_column(Boolean, default=False)
+    synced_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class Publication(Base):
+    __tablename__ = "publications"
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    post_id: Mapped[int] = mapped_column(ForeignKey("studio_posts.id", ondelete="CASCADE"), index=True)
+    version: Mapped[int] = mapped_column(Integer)
+    platform: Mapped[str] = mapped_column(String(40))
+    account_id: Mapped[str] = mapped_column(String(80))
+    scheduled_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    status: Mapped[str] = mapped_column(String(24), default="held")
+    provider_id: Mapped[str | None] = mapped_column(String(80), index=True)
+    post_url: Mapped[str | None] = mapped_column(Text)
+    error: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class WebhookInbox(Base):
+    __tablename__ = "webhook_inbox"
+    id: Mapped[str] = mapped_column(String(100), primary_key=True)
+    payload: Mapped[dict] = mapped_column(JSON)
+    processed: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

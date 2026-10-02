@@ -64,6 +64,7 @@ jobs:
             cd /opt/booklender
             test -f backend/.env
             docker compose --parallel 1 --env-file backend/.env -f backend/compose.yaml up --build -d --remove-orphans
+            docker compose --env-file backend/.env -f backend/compose.yaml up -d --no-deps --force-recreate proxy
             for attempt in $(seq 1 30); do
               if curl --fail --silent http://127.0.0.1:8001/health/ready >/dev/null && curl --fail --silent http://127.0.0.1:3000/login >/dev/null; then
                 break

@@ -13,6 +13,10 @@ from app.auth import get_current_session, require_csrf
 from app.db import get_db
 from app.models import AuditEvent, AuthSession, BrandPolicyVersion, BrandRule, Invitation, SourceSetting, SpendEntry, SpendSettings, StudioPost, User
 from app.security import hash_password, hash_session_token
+from app.jobs import ACTIVE, job_dto, save_checks
+from app.models import WorkJob, Publication
+from app.permissions import PERMISSIONS, effective_permissions, require_permission
+from app.workflow import generation_command, connections_dto, release_approved, schedule_command, sync_accounts, accounts_dto
 
 router = APIRouter(prefix="/studio", tags=["studio settings"])
 
@@ -79,8 +83,7 @@ def read_brand(db: Session) -> dict:
 
 
 def mutate_brand(db: Session, user: User, request: Request, command: dict) -> dict:
-    if user.role != "admin" and (user.role != "campaigns_manager" or "Brand" not in (user.module_access or ROLE_MODULES.get(user.role, []))):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You do not have permission for this action")
+    require_permission(user, "brand.edit")
     policy = active_brand(db, lock=True)
     old_rules = db.scalars(select(BrandRule).where(BrandRule.policy_version_id == policy.id).order_by(BrandRule.created_at, BrandRule.id)).all()
     voice = policy.voice
@@ -156,7 +159,7 @@ def read_spend(db: Session) -> dict:
 
 
 def mutate_spend(db: Session, user: User, request: Request, command: dict) -> dict:
-    require_admin(user)
+    require_permission(user, "spend.edit")
     if command.get("key") not in {"cap", "efficientModel"}:
         raise HTTPException(status_code=422, detail="Unknown spend setting")
     cfg = db.scalar(select(SpendSettings).order_by(SpendSettings.updated_at.desc()).with_for_update())
@@ -191,9 +194,12 @@ def user_dto(user: User) -> dict:
         "initials": initials(user.name),
         "email": user.email,
         "role": ROLE_TO_LABEL.get(user.role, "Viewer"),
-        "modules": user.module_access or ROLE_MODULES.get(user.role, ROLE_MODULES["viewer"]),
+        "modules": MODULES if user.role == "admin" else user.module_access,
         "invited": user.invited,
         "isApprover": user.is_approver,
+        "permissions": effective_permissions(user),
+        "roleTitles": user.role_titles,
+        "active": user.active,
     }
 
 
@@ -205,27 +211,35 @@ def read_team(db: Session, user: User) -> list[dict]:
 
 POST_DEFAULTS = {
     "book": "Team topic", "author": "BookLender", "cover": "#44546A", "accent": "#F2C14E",
-    "source": "team", "event": "Team topic", "eventDays": 14, "reason": "Added by you",
-    "format": "image", "platform": "Instagram", "fit": 3, "human": True, "bookId": None,
+    "source": "team", "event": "Team topic", "reason": "Added by you",
+    "format": "image", "platform": "Instagram", "human": True, "bookId": None,
 }
 
 
 def post_dto(post: StudioPost) -> dict:
-    return {**post.payload, "id": post.id, "stage": post.stage, "version": post.version,
+    payload = dict(post.payload)
+    if payload.get("scheduledAt"):
+        local = datetime.fromisoformat(payload["scheduledAt"]).astimezone(ZoneInfo("America/New_York"))
+        payload["day"] = (local.date() - datetime.now(ZoneInfo("America/New_York")).date()).days
+        payload["time"] = local.strftime("%H:%M")
+    return {**payload, "id": post.id, "stage": post.stage, "version": post.version,
             "history": [{"version": item.get("version"), "reason": item.get("reason", "Updated"), "note": item.get("note", "")}
                         for item in post.version_history], "approvedVersion": post.approved_version}
 
 
 def read_posts(db: Session) -> list[dict]:
     posts = db.scalars(select(StudioPost).order_by(StudioPost.created_at.desc(), StudioPost.id.desc())).all()
-    return [post_dto(post) for post in posts]
+    publications = list(db.scalars(select(Publication)))
+    return [{**post_dto(post), "publicationTargets": [{"id": str(t.id), "platform": t.platform,
+              "status": t.status, "postUrl": t.post_url, "error": t.error}
+              for t in publications if t.post_id == post.id and t.status != "cancelled"]} for post in posts]
 
 
 def read_sources(db: Session) -> dict:
     defaults = {"calendar": False, "news": False, "team": True}
     rows = db.scalars(select(SourceSetting)).all()
     for row in rows: defaults[row.key] = row.enabled
-    return {"sources": defaults, "connections": [], "events": []}
+    return {"sources": defaults, "connections": connections_dto(db), "events": [], "accounts": accounts_dto(db)}
 
 
 def read_logs(db: Session) -> list[dict]:
@@ -239,18 +253,38 @@ def read_logs(db: Session) -> list[dict]:
         logs.append({"id": str(event.id), "at": event.created_at.isoformat(), "actor": actor_name or "System", "level": level,
                      "message": action[:1].upper() + action[1:], "detail": event.resource_type,
                      "cause": None, "fix": None, "done": True})
-    return logs
+    jobs = db.execute(select(WorkJob, User.name).outerjoin(User, WorkJob.actor_id == User.id).where(WorkJob.updated_at >= since).order_by(WorkJob.updated_at.desc()).limit(200)).all()
+    return sorted([*logs, *({**job_dto(job), "actor": actor_name or "System"} for job, actor_name in jobs)], key=lambda item: item["at"], reverse=True)[:300]
 
 
 def mutate_sources(db: Session, user: User, request: Request, command: dict) -> dict:
-    if user.role != "admin" and "Sources" not in (user.module_access or ROLE_MODULES.get(user.role, [])):
-        raise HTTPException(status_code=403, detail="You do not have permission for this action")
+    require_permission(user, "sources.manage")
+    if command.get("action") == "sync-accounts":
+        sync_accounts(db)
+        audit(db, user, request, "provider.accounts_synced", "zernio", "accounts", {})
+        db.commit()
+        return {"message": "Accounts synced. Select the exact Facebook and Instagram accounts to use."}
+    if command.get("action") == "select-account":
+        from app.models import ProviderAccount
+        target = db.get(ProviderAccount, str(command.get("id")))
+        if not target or not target.active:
+            raise HTTPException(422, "Choose an active synced account.")
+        accounts = db.scalars(select(ProviderAccount).where(ProviderAccount.platform == target.platform).with_for_update()).all()
+        for account in accounts:
+            account.selected = account.id == target.id
+        audit(db, user, request, "provider.account_selected", "zernio", target.id, {})
+        db.commit()
+        return {"message": "Publishing account selected"}
+    if command.get("action") == "reconnect":
+        return {"message": "Open Zernio Connections to reconnect the account, then Sync accounts here.", "url": "https://zernio.com/dashboard/connections"}
     if command.get("action") != "toggle":
         raise HTTPException(status_code=503, detail="Provider connection changes are not synced with the app yet.")
     key = command.get("key")
     value = command.get("value")
     if key not in {"calendar", "news", "team"} or not isinstance(value, bool):
         raise HTTPException(status_code=422, detail="Choose a valid source and enabled state")
+    if key != "team" and value:
+        raise HTTPException(422, "External sources are deferred. Manual team topics are available now.")
     setting = db.get(SourceSetting, key)
     if setting is None:
         setting = SourceSetting(key=key, enabled=value, updated_by=user.id)
@@ -264,11 +298,14 @@ def mutate_sources(db: Session, user: User, request: Request, command: dict) -> 
 
 def mutate_post(db: Session, user: User, request: Request, command: dict) -> dict:
     action = command.get("action")
+    if action in {"generate", "generate-all", "revise", "new-angle", "suggest", "generate-media"}:
+        return generation_command(db, user, command)
+    permissions = {"create": "ideas.create", "pick": "ideas.pick", "unpick": "ideas.pick", "note": "content.edit",
+                   "update": "content.edit", "configure": "content.edit", "remove-media": "media.upload", "reopen": "content.edit", "approve": "review.approve", "reject": "review.approve",
+                   "archive": "content.archive", "restore": "content.archive", "skip": "content.archive"}
+    if action in permissions:
+        require_permission(user, permissions[action])
     module = "Review" if action in {"approve", "reject", "revise"} else "Board" if action in {"archive", "restore", "unpick"} else "Ideas"
-    if user.role != "admin" and module not in (user.module_access or ROLE_MODULES.get(user.role, [])):
-        raise HTTPException(status_code=403, detail="You do not have permission for this action")
-    if action in {"generate", "generate-all", "revise", "new-angle"}:
-        raise HTTPException(status_code=503, detail="AI generation is not connected yet. No provider request or charge was made.")
     if action == "create":
         title = str(command.get("title") or "").strip()
         if not title:
@@ -290,7 +327,9 @@ def mutate_post(db: Session, user: User, request: Request, command: dict) -> dic
     post = db.scalar(select(StudioPost).where(StudioPost.id == post_id).with_for_update())
     if post is None:
         raise HTTPException(status_code=404, detail="Post not found")
-    if action == "update" and post.stage == "review" and user.role != "admin" and "Review" not in (user.module_access or ROLE_MODULES.get(user.role, [])):
+    if db.scalar(select(WorkJob.id).where(WorkJob.post_id == post.id, WorkJob.status.in_(ACTIVE))):
+        raise HTTPException(409, "Wait for the current background job before changing this post.")
+    if action == "update" and post.stage == "review" and user.role != "admin" and "Review" not in user.module_access:
         raise HTTPException(status_code=403, detail="You do not have permission to edit a post in Review")
     if command.get("version") is not None:
         try:
@@ -301,7 +340,41 @@ def mutate_post(db: Session, user: User, request: Request, command: dict) -> dic
             raise HTTPException(status_code=409, detail="This post changed in another session. Refresh and try again.")
 
     message = ""
-    if action == "pick":
+    if action == "reopen":
+        if post.stage != "scheduled":
+            raise HTTPException(409, "Only an approved post can be reopened.")
+        targets = db.scalars(select(Publication).where(Publication.post_id == post.id, Publication.status != "cancelled")).all()
+        if any(t.provider_id or t.status != "held" for t in targets):
+            raise HTTPException(409, "Cancel the provider schedule and wait for confirmation before editing this post.")
+        post.stage = "review"
+        post.approved_version = None
+        message = "Reopened for editing. Approval is required again."
+    elif action == "configure":
+        if post.stage not in {"idea", "selected", "review"}:
+            raise HTTPException(409, "Format and platform can be changed before approval only.")
+        if command.get("format") not in {"image", "carousel", "video"} or command.get("platform") not in {"Facebook", "Instagram"}:
+            raise HTTPException(422, "Choose a valid format and platform.")
+        targets = db.scalars(select(Publication).where(Publication.post_id == post.id, Publication.status != "cancelled")).all()
+        for target in targets:
+            target.status = "cancelled"
+        post.payload = {**post.payload, "format": command["format"], "platform": command["platform"], "scheduledAt": None,
+                        "platforms": [command["platform"]], "media": [] if command["format"] != post.payload["format"] else post.payload.get("media", [])}
+        post.version += 1
+        post.approved_version = None
+        message = "Format and platform saved"
+    elif action == "remove-media":
+        if post.stage not in {"selected", "review"}:
+            raise HTTPException(409, "Attachments can only be changed before approval.")
+        media = post.payload.get("media", [])
+        kept = [item for item in media if item["id"] != command.get("assetId")]
+        if len(kept) == len(media):
+            raise HTTPException(404, "Attachment not found")
+        post.version_history = [*post.version_history, {"version": post.version, "payload": dict(post.payload), "reason": "Attachment removed"}]
+        post.version += 1
+        post.approved_version = None
+        post.payload = {**post.payload, "media": kept}
+        message = "Attachment removed"
+    elif action == "pick":
         if post.stage != "idea":
             raise HTTPException(status_code=409, detail="Only an idea can be picked")
         post.stage = "selected"
@@ -319,7 +392,9 @@ def mutate_post(db: Session, user: User, request: Request, command: dict) -> dic
         if action == "reject":
             require_approver(user)
         post.stage = "archived"
-        post.payload = {**post.payload, "archiveReason": "Rejected by approver" if action == "reject" else "Skipped by team"}
+        for target in db.scalars(select(Publication).where(Publication.post_id == post.id, Publication.status == "held")):
+            target.status = "cancelled"
+        post.payload = {**post.payload, "scheduledAt": None, "day": None, "time": None, "archiveReason": "Rejected by approver" if action == "reject" else "Skipped by team"}
         message = "Moved to Archive"
     elif action == "restore":
         if post.stage != "archived":
@@ -339,18 +414,21 @@ def mutate_post(db: Session, user: User, request: Request, command: dict) -> dic
     elif action == "update":
         if post.stage not in {"selected", "review"}:
             raise HTTPException(status_code=409, detail="Drafts can only be edited after picking an idea")
-        changed = {key: command[key].strip() for key in ("caption", "tags") if isinstance(command.get(key), str)}
+        changed = {key: command[key].strip() for key in ("caption", "tags", "script", "mediaBrief") if isinstance(command.get(key), str)}
         if not changed:
             raise HTTPException(status_code=422, detail="Add a caption or tags before saving")
         if "caption" in changed and (not changed["caption"] or len(changed["caption"]) > 5000):
             raise HTTPException(status_code=422, detail="Caption must contain 1 to 5,000 characters")
         if "tags" in changed and len(changed["tags"]) > 500:
             raise HTTPException(status_code=422, detail="Hashtags must be 500 characters or fewer")
+        if any(len(changed.get(key, "")) > 5000 for key in ("script", "mediaBrief")):
+            raise HTTPException(422, "Script and media brief must be 5,000 characters or fewer")
         post.version_history = [*post.version_history, {"version": post.version, "payload": dict(post.payload), "reason": "Content edited", "at": datetime.now(UTC).isoformat()}]
         post.version += 1
         post.approved_version = None
         post.payload = {**post.payload, **changed}
         post.stage = "review"
+        save_checks(db, post)
         message = "Draft saved and sent to Review"
     elif action == "approve":
         require_approver(user)
@@ -358,10 +436,14 @@ def mutate_post(db: Session, user: User, request: Request, command: dict) -> dic
             raise HTTPException(status_code=409, detail="Only a post in Review can be approved")
         if not str(post.payload.get("caption") or "").strip():
             raise HTTPException(status_code=422, detail="Add a caption before approval")
+        if not save_checks(db, post)["passed"]:
+            db.commit()
+            raise HTTPException(422, "Resolve the brand violations before approval.")
         post.stage = "scheduled"
         post.approved_version = post.version
-        post.payload = {**post.payload, "approvedBy": user.name}
-        message = "Approved. Held in Schedule; publishing is not connected to this action."
+        post.payload = {**post.payload, "approvedBy": user.name, "approvedPlatforms": post.payload.get("platforms", [post.payload["platform"]])}
+        release_approved(db, post)
+        message = "Approved. Posts with an authorized schedule are queued for Zernio."
     else:
         raise HTTPException(status_code=422, detail="Unknown post command")
 
@@ -377,20 +459,27 @@ def audit(db: Session, user: User, request: Request, action: str, resource_type:
 
 
 def require_approver(user: User) -> None:
-    if user.role != "admin" and not user.is_approver:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only an assigned approver can approve or reject content")
+    require_permission(user, "review.approve")
 
 
 def mutate_team(db: Session, user: User, request: Request, command: dict) -> dict:
     require_admin(user)
     action = command.get("action")
-    if action == "invite":
+    if action in {"invite", "resend"}:
+        if action == "resend":
+            try:
+                target = db.get(User, UUID(str(command.get("id"))))
+            except ValueError:
+                raise HTTPException(422, "Invalid user ID") from None
+            if not target or target.active:
+                raise HTTPException(409, "Only pending users can be invited again.")
+            command = {**command, "email": target.email, "name": target.name, "role": target.role, "isApprover": target.is_approver}
         try:
             email = validate_email(str(command.get("email") or "").strip(), check_deliverability=False).normalized.casefold()
         except EmailNotValidError:
             raise HTTPException(status_code=422, detail="Enter a valid email address") from None
         role = ROLE_TO_API.get(str(command.get("role") or ""))
-        if role is None or role == "admin":
+        if role is None or (role == "admin" and action != "resend"):
             raise HTTPException(status_code=422, detail="Choose a non-admin role")
         existing = db.scalar(select(User).where(User.email == email).with_for_update())
         if existing and (existing.active or not existing.invited):
@@ -405,7 +494,8 @@ def mutate_team(db: Session, user: User, request: Request, command: dict) -> dic
         new_user.active = False
         new_user.invited = True
         new_user.is_approver = approver_flag or role == "approver"
-        new_user.module_access = ROLE_MODULES[role]
+        if not existing:
+            new_user.module_access = ROLE_MODULES[role]
         db.add(new_user)
         db.flush()
         token = secrets.token_urlsafe(32)
@@ -420,7 +510,18 @@ def mutate_team(db: Session, user: User, request: Request, command: dict) -> dic
             invitation.created_by = user.id
         db.add(AuditEvent(actor_user_id=user.id, action="team.invitation_created", resource_type="user", resource_id=str(new_user.id), request_id=request.headers.get("x-request-id"), details={"email": email, "role": role}))
         db.commit()
-        return {"message": "Invite created. Copy the activation link and send it to the invitee securely.", "activationToken": token, "expiresInHours": 48}
+        from app.mail import send_invitation
+        try:
+            sent = send_invitation(email, token)
+            mail_status = "completed" if sent else "failed"
+            cause = None if sent else "SMTP sender configuration is missing."
+        except Exception:
+            sent, mail_status, cause = False, "failed", "Invite email delivery failed."
+        db.add(WorkJob(kind="invite_email", provider="SMTP", actor_id=user.id, status=mail_status, attempts=1,
+            payload={}, result={}, history=[], cause=cause, fix=None if sent else "Check SMTP settings, then resend the invitation from Team.", next_run=datetime.now(UTC)))
+        db.commit()
+        return {"message": "Invitation emailed" if sent else "Invite created. Email unavailable; copy the link or configure SMTP and resend.",
+                "activationToken": None if sent else token, "emailSent": sent, "expiresInHours": 48}
 
     try:
         target_id = UUID(str(command.get("id")))
@@ -442,13 +543,23 @@ def mutate_team(db: Session, user: User, request: Request, command: dict) -> dic
         module = str(command.get("module") or "")
         if module not in MODULES:
             raise HTTPException(status_code=422, detail="Unknown module")
-        access = list(target.module_access or ROLE_MODULES.get(target.role, []))
+        access = list(target.module_access)
         access = [item for item in access if item != module] if module in access else [*access, module]
         target.module_access = access
     elif action == "approver":
         if not isinstance(command.get("value"), bool):
             raise HTTPException(status_code=422, detail="Approver setting must be true or false")
         target.is_approver = command["value"]
+        target.permissions = {**target.permissions, "review.approve": command["value"]}
+    elif action == "permission":
+        key = command.get("permission")
+        if key not in PERMISSIONS or not isinstance(command.get("value"), bool):
+            raise HTTPException(422, "Choose a valid action permission")
+        if target.role == "admin":
+            raise HTTPException(409, "Super admins always retain full access.")
+        target.permissions = {**target.permissions, key: command["value"]}
+        if key == "review.approve":
+            target.is_approver = command["value"]
     else:
         raise HTTPException(status_code=422, detail="Unknown team command")
     db.add(AuditEvent(actor_user_id=user.id, action=f"team.{action}_updated", resource_type="user", resource_id=str(target.id), request_id=request.headers.get("x-request-id"), details={"role": target.role, "isApprover": target.is_approver}))
@@ -459,6 +570,7 @@ def mutate_team(db: Session, user: User, request: Request, command: dict) -> dic
 @router.get("/{resource}")
 def get_setting_resource(
     resource: str,
+    request: Request,
     session_data: tuple[User, AuthSession] = Depends(current_user_and_session),
     db: Session = Depends(get_db),
 ):
@@ -474,7 +586,21 @@ def get_setting_resource(
     if resource == "sources":
         return read_sources(db)
     if resource == "logs":
+        require_permission(user, "logs.view")
         return read_logs(db)
+    if resource == "schedule":
+        return read_posts(db)
+    if resource == "calendar":
+        if user.role != "admin" and "Schedule" not in user.module_access:
+            raise HTTPException(403, "Schedule access required")
+        try:
+            start = datetime.fromisoformat(request.query_params["start"].replace("Z", "+00:00"))
+            end = datetime.fromisoformat(request.query_params["end"].replace("Z", "+00:00"))
+            if not start.tzinfo or not end.tzinfo or not timedelta(0) < end - start <= timedelta(days=63):
+                raise ValueError()
+        except (ValueError, KeyError):
+            raise HTTPException(422, "Provide a valid calendar range of at most 63 days with timezone offsets.") from None
+        return [post for post in read_posts(db) if post.get("scheduledAt") and start <= datetime.fromisoformat(post["scheduledAt"]) < end]
     raise HTTPException(status_code=404, detail="Settings resource not found")
 
 
@@ -498,4 +624,9 @@ def post_setting_resource(
         return mutate_post(db, user, request, command)
     if resource == "sources":
         return mutate_sources(db, user, request, command)
+    if resource == "schedule":
+        return schedule_command(db, user, command)
+    if resource == "logs":
+        from app.workflow import retry_job
+        return retry_job(db, user, command)
     raise HTTPException(status_code=404, detail="Settings resource not found")

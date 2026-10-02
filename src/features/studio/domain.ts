@@ -25,9 +25,10 @@ export const spendStatus = (state: StudioState) => used(state) >= state.spend.ca
 export const atRisk = (post: Post) => !['published', 'archived', 'scheduled'].includes(post.stage) && post.eventDays != null && post.eventDays <= 3;
 export const byTime = (a: Post, b: Post) => ((a.day || 0) - (b.day || 0)) || String(a.time).localeCompare(String(b.time));
 export function dayParts(offset = 0) {
-  const date = new Date();
-  date.setDate(date.getDate() + offset);
-  return { wd: date.toLocaleDateString('en-US', { weekday: 'short' }), d: date.getDate(), m: date.toLocaleDateString('en-US', { month: 'short' }) };
+  const parts = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', year: 'numeric', month: 'numeric', day: 'numeric' }).formatToParts(new Date());
+  const value = (key: string) => Number(parts.find(part=>part.type===key)?.value);
+  const date = new Date(Date.UTC(value('year'), value('month')-1, value('day')+offset, 12));
+  return { wd: date.toLocaleDateString('en-US', { weekday: 'short', timeZone: 'UTC' }), d: date.getUTCDate(), m: date.toLocaleDateString('en-US', { month: 'short', timeZone: 'UTC' }) };
 }
 export function dayLabel(offset = 0) {
   if (!offset) return 'Today'; if (offset === 1) return 'Tomorrow'; if (offset === -1) return 'Yesterday';
