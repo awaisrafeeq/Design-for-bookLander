@@ -68,11 +68,10 @@ def generation_command(db, user, command):
                              f"{direction}\n"
                              "Make this a cinematic vertical social video with 3 distinct shots: an establishing shot, a close detail/action shot, "
                              "and a closing shot. Use visible camera movement and a clear change in action or framing between shots. "
-                             "Show the requested objects without writing, labels, signs, or text on them. Do not create subtitles or graphic overlays.\n\n"
-                             "[SPEECH]\n"
-                             f"Speak this voiceover verbatim and only once: \"{voiceover}\"\n\n"
+                             "If the direction above asks for words or labels, ignore that part and show blank, unmarked props. "
+                             "Do not include any speech in this visual prompt.\n\n"
                              "[SOUNDS]\n"
-                             "Quiet natural room tone only. No extra spoken words.\n\n"
+                             "No extra speech or sound effects. The separately supplied voiceover audio is the only audio.\n\n"
                              "[TEXT]\n"
                              "None. Do not render any visible text, captions, subtitles, labels, signs, letters, numbers, or logos.\n\n"
                              f"Brand style: {policy['voice']}. Follow these brand rules: {policy['rules']}. "
@@ -96,7 +95,7 @@ def generation_command(db, user, command):
                         "Do not imitate or invent an exact book cover. Use an uploaded approved cover only if one is provided.",
                     ))
                 queue(db, "media", provider, user.id, post.id,
-                      {"brief": brief, "brand": policy, **({"duration": duration} if provider == "Creatify" else {})})
+                      {"brief": brief, "brand": policy, **({"duration": duration, "voiceover": voiceover} if provider == "Creatify" else {})})
             else:
                 if post.stage not in ({"review"} if action == "revise" else {"selected"}):
                     raise HTTPException(409, "Pick an idea before generation, or revise a post in Review.")

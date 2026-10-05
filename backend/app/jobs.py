@@ -14,7 +14,8 @@ from app.models import (AuditEvent, BrandPolicyVersion, BrandRule, MediaAsset, P
                         Publication, SpendEntry, StudioPost, User, WorkJob, WebhookInbox)
 from app.permissions import effective_permissions
 from app.providers import (ProviderError, Zernio, creatify_create, creatify_result,
-                           predis_create, predis_result, text_completion)
+                           creatify_tts_create, creatify_tts_result, predis_create,
+                           predis_result, text_completion)
 
 ACTIVE = {"queued", "running", "waiting", "retry_pending"}
 
@@ -51,7 +52,7 @@ def job_dto(job):
         "cause": job.cause, "fix": job.fix, "done": job.status == "completed", "jobId": str(job.id),
         "status": job.status, "attempts": job.attempts, "providerJobId": job.provider_id,
         "nextRetryAt": job.next_run.isoformat() if job.status in {"waiting", "retry_pending"} else None,
-        "history": job.history, "result": {key: value for key, value in job.result.items() if key in {"credits", "usage", "model"}}}
+        "history": job.history, "result": {key: value for key, value in job.result.items() if key in {"credits", "ttsCredits", "usage", "model"}}}
 
 
 def selected_account(db, platform):
@@ -162,7 +163,32 @@ def execute_text(db, job, post):
 def execute_media(db, job, post):
     if not job.provider_id:
         if job.provider == "Creatify":
-            response = creatify_create(job.payload["brief"], post.payload["title"], job.payload.get("duration", 15))
+            state = job.result or {}
+            tts_id = state.get("ttsJobId")
+            tts = creatify_tts_result(tts_id) if tts_id else creatify_tts_create(job.payload["voiceover"])
+            if not tts_id:
+                tts_id = tts.get("id")
+                if tts_id:
+                    state = {**state, "ttsJobId": tts_id}
+                    job.result = state
+                    db.commit()
+            if str(tts.get("status", "")).lower() in {"failed", "error"}:
+                raise ValueError(f"Creatify voiceover generation failed: {tts.get('failed_reason') or 'Check the provider job and credits before retrying.'}")
+            audio_url = tts.get("output")
+            if not tts_id and not audio_url:
+                raise ProviderError("Creatify", ambiguous=True)
+            if not audio_url:
+                if datetime.now(UTC) - job.created_at > timedelta(hours=2):
+                    raise ValueError("Creatify voiceover generation is taking longer than two hours. Inspect its TTS job before retrying.")
+                job.result = {**state, "ttsJobId": tts_id, "ttsCredits": tts.get("credits_used", state.get("ttsCredits"))}
+                job.status = "waiting"
+                job.next_run = datetime.now(UTC) + timedelta(seconds=30)
+                return
+            state = {**state, "ttsJobId": tts_id, "ttsCredits": tts.get("credits_used", state.get("ttsCredits")),
+                     "voiceoverDuration": tts.get("duration")}
+            job.result = state
+            db.commit()
+            response = creatify_create(job.payload["brief"], audio_url, job.payload.get("duration", 15))
             job.provider_id = response.get("id")
         else:
             job.provider_id = predis_create(job.payload["brief"], post.payload["format"])
@@ -177,7 +203,7 @@ def execute_media(db, job, post):
             raise ValueError(f"Creatify video generation failed: {response.get('failed_reason') or 'Check the provider job and credits before retrying.'}")
         output_url = response.get("video_output") or response.get("output")
         urls = [output_url] if status in {"done", "completed", "success"} and output_url else []
-        job.result = {"credits": response.get("credits_used")}
+        job.result = {**(job.result or {}), "credits": response.get("credits_used")}
     else:
         response = predis_result(job.provider_id, post.payload.get("format", "image"))
         if response and str(response.get("status", "")).lower() in {"error", "failed"}:

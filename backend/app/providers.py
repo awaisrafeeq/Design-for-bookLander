@@ -117,12 +117,25 @@ def predis_result(post_id: str, format_name: str):
     return None
 
 
-def creatify_create(prompt: str, title: str, duration: int = 15):
+def creatify_tts_create(script: str):
+    if not all((settings.creatify_api_id, settings.creatify_api_key)):
+        raise ValueError("Set CREATIFY_API_ID and CREATIFY_API_KEY first.")
+    return call("Creatify", "POST", "https://api.creatify.ai/api/text_to_speech/",
+        headers={"X-API-ID": settings.creatify_api_id, "X-API-KEY": settings.creatify_api_key},
+        json={"script": script})
+
+
+def creatify_tts_result(job_id: str):
+    return call("Creatify", "GET", f"https://api.creatify.ai/api/text_to_speech/{job_id}/",
+        headers={"X-API-ID": settings.creatify_api_id, "X-API-KEY": settings.creatify_api_key})
+
+
+def creatify_create(prompt: str, audio_url: str, duration: int = 15):
     if not all((settings.creatify_api_id, settings.creatify_api_key)):
         raise ValueError("Set CREATIFY_API_ID and CREATIFY_API_KEY first.")
     return call("Creatify", "POST", "https://api.creatify.ai/api/boreal/",
         headers={"X-API-ID": settings.creatify_api_id, "X-API-KEY": settings.creatify_api_key},
-        json={"prompt": f"BookLender social video: {title}.\n\n{prompt}", "resolution": "720p",
+        json={"prompt": prompt, "audio_url": audio_url, "resolution": "720p",
               "aspect_ratio": "9:16", "duration": max(10, min(60, int(duration))),
               "negative_prompt": "Any visible text or typography, subtitles, captions, title cards, labels, signs, letters, words, numbers, logos, watermarks, gibberish text, misspelled words"})
 
