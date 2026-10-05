@@ -8,6 +8,7 @@ x-provider-environment: &provider-environment
   PREDIS_BRAND_ID: ${PREDIS_BRAND_ID:-}
   CREATIFY_API_ID: ${CREATIFY_API_ID:-}
   CREATIFY_API_KEY: ${CREATIFY_API_KEY:-}
+  CREATIFY_TTS_ACCENT: ${CREATIFY_TTS_ACCENT:-}
   PUBLIC_APP_URL: ${PUBLIC_APP_URL:-https://booklender.tech}
   MEDIA_ROOT: /data/media
   MEDIA_SIGNING_KEY: ${MEDIA_SIGNING_KEY:-}

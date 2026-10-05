@@ -57,9 +57,9 @@ def generation_command(db, user, command):
                 if not save_checks(db, post)["passed"]:
                     raise HTTPException(422, "Resolve the brand violations before generating media.")
                 provider = "Creatify" if post.payload["format"] == "video" else "Predis"
-                configured = (settings.creatify_api_key and settings.creatify_api_id) if provider == "Creatify" else (settings.predis_api_key and settings.predis_brand_id)
+                configured = (settings.creatify_api_key and settings.creatify_api_id and settings.creatify_tts_accent) if provider == "Creatify" else (settings.predis_api_key and settings.predis_brand_id)
                 if not configured:
-                    requirement = "API credentials" if provider == "Creatify" else "API key and brand ID"
+                    requirement = "API ID, API key and TTS accent ID" if provider == "Creatify" else "API key and brand ID"
                     raise HTTPException(503, f"Configure {provider} {requirement} on Hostinger first.")
                 if provider == "Creatify":
                     voiceover = post.payload.get("script") or post.payload["caption"]
@@ -143,7 +143,7 @@ def connections_dto(db):
                        "connected": bool(account and account.active), "detail": account.name if account else "Sync accounts, then select the correct publishing account."})
     for identifier, name, configured in (("openrouter", "OpenRouter", settings.openrouter_api_key and settings.openrouter_model),
                                        ("predis", "Predis", settings.predis_api_key and settings.predis_brand_id),
-                                       ("creatify", "Creatify", settings.creatify_api_key and settings.creatify_api_id)):
+                                       ("creatify", "Creatify", settings.creatify_api_key and settings.creatify_api_id and settings.creatify_tts_accent)):
         result.append({"id": identifier, "name": name, "purpose": "Generation", "connected": False,
                        "detail": "Configured; API access is verified when a job runs." if configured else "Server credentials missing."})
     return result

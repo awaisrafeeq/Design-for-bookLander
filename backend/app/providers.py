@@ -145,11 +145,11 @@ def predis_result(post_id: str, format_name: str):
 
 
 def creatify_tts_create(script: str):
-    if not all((settings.creatify_api_id, settings.creatify_api_key)):
-        raise ValueError("Set CREATIFY_API_ID and CREATIFY_API_KEY first.")
+    if not all((settings.creatify_api_id, settings.creatify_api_key, settings.creatify_tts_accent)):
+        raise ValueError("Set CREATIFY_API_ID, CREATIFY_API_KEY, and CREATIFY_TTS_ACCENT first.")
     return call("Creatify", "POST", "https://api.creatify.ai/api/text_to_speech/",
         headers={"X-API-ID": settings.creatify_api_id, "X-API-KEY": settings.creatify_api_key},
-        json={"script": script}, operation="TTS create")
+        json={"script": script, "accent": settings.creatify_tts_accent}, operation="TTS create")
 
 
 def creatify_tts_result(job_id: str):

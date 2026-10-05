@@ -42,7 +42,7 @@ Edit the private server file; do not commit or send keys in chat.
 | Text and ideas | `OPENROUTER_API_KEY`, `OPENROUTER_MODEL` (explicit supported model ID) |
 | Publishing | `ZERNIO_API_KEY`; optional `ZERNIO_PROFILE_ID` to limit account discovery |
 | Image/carousel | `PREDIS_API_KEY`, `PREDIS_BRAND_ID` |
-| Directed video | `CREATIFY_API_ID`, `CREATIFY_API_KEY` (Creatify Boreal text-to-video API access; no avatar ID required) |
+| Directed video | `CREATIFY_API_ID`, `CREATIFY_API_KEY`, `CREATIFY_TTS_ACCENT` (choose an accent ID from `GET /api/voices/`; no avatar ID required) |
 | Provider media download | `MEDIA_SIGNING_KEY` (generate once using `openssl rand -hex 32`) |
 | Invite emails | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_FROM`, `SMTP_SECURITY` (`ssl` or `starttls`) |
 | Zernio callbacks | `ZERNIO_WEBHOOK_SECRET` matching the webhook configured in Zernio |
