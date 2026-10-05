@@ -40,6 +40,10 @@ def call(provider: str, method: str, url: str, *, operation: str | None = None, 
                 detail = next((str(data[key]) for key in ("detail", "error", "message", "failed_reason") if data.get(key)), None)
                 if detail is None and data.get("errors"):
                     detail = json.dumps(data["errors"], ensure_ascii=True)
+                if detail is None:
+                    safe_data = {key: value for key, value in data.items()
+                                 if key.casefold() not in {"prompt", "script", "api_key", "key", "authorization"}}
+                    detail = json.dumps(safe_data, ensure_ascii=True) if safe_data else None
             elif isinstance(data, list):
                 detail = json.dumps(data, ensure_ascii=True)
         except ValueError:
