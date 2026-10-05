@@ -110,9 +110,13 @@ def text_completion(prompt: str, instruction: str):
         json={"model": settings.openrouter_model, "max_tokens": 1600,
               "response_format": {"type": "json_object"},
               "messages": [{"role": "system", "content": instruction}, {"role": "user", "content": prompt}]})
-    # Keep the charged usage even if output validation fails downstream.
-    content = response.get("choices", [{}])[0].get("message", {}).get("content", "")
-    return content, response.get("usage", {}), response.get("id")
+    # OpenRouter can return a successful envelope with no message text. Return
+    # the usage and request ID so the caller can record them before validation.
+    choices = response.get("choices")
+    choice = choices[0] if isinstance(choices, list) and choices and isinstance(choices[0], dict) else {}
+    message = choice.get("message") if isinstance(choice.get("message"), dict) else {}
+    content = message.get("content")
+    return content if isinstance(content, str) else "", response.get("usage", {}), response.get("id")
 
 
 def predis_create(brief: str, format_name: str):

@@ -116,7 +116,12 @@ def execute_text(db, job, post):
                           model=settings.openrouter_model, provider_job_id=provider_id))
     # Persist charged usage before validating the generated JSON.
     db.commit()
-    data = json.loads(content)
+    if not content.strip():
+        raise ValueError(f"OpenRouter model {settings.openrouter_model} returned an empty answer. Choose a model that reliably supports JSON output, then retry.")
+    try:
+        data = json.loads(content)
+    except (json.JSONDecodeError, TypeError) as exc:
+        raise ValueError(f"OpenRouter model {settings.openrouter_model} returned text that was not valid JSON. Choose a model that follows JSON output and retry.") from exc
     if job.kind in {"suggest", "new_angle"}:
         topics = job.payload["topics"]
         existing = {re.sub(r"\W+", "", p.payload.get("title", "").casefold()) for p in db.scalars(select(StudioPost))}
@@ -369,7 +374,10 @@ def run_job(job_id):
             job = db.get(WorkJob, job_id)
             safe = isinstance(exc, (ValueError, ProviderError))
             job.cause = str(exc)[:500] if safe else "Unexpected processing error. Check worker health and configuration."
-            job.fix = exc.fix if isinstance(exc, ProviderError) else "Review the job input and server configuration, then retry."
+            job.fix = (exc.fix if isinstance(exc, ProviderError) else
+                       "Change OPENROUTER_MODEL to a model that returns valid JSON, update the server .env, restart the worker, then retry."
+                       if isinstance(exc, ValueError) and "OpenRouter model" in str(exc) else
+                       "Review the job input and server configuration, then retry.")
             ambiguous = isinstance(exc, ProviderError) and exc.ambiguous
             retryable = isinstance(exc, ProviderError) and (exc.status == 429 or exc.status >= 500) and not ambiguous
             # GET polling and Zernio POST with a stable key can safely recover transport failures.
