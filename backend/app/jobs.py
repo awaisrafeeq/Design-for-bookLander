@@ -84,7 +84,10 @@ def execute_text(db, job, post):
             'and the selected format guidance; the user should not need to write it. Make the visual recognizably about the topic '
             'using safe symbolic objects, setting, and composition. For a named book, suggest themes or non-cover objects related '
             'to its supplied topic context, but do not invent plot details, characters, cover art, or quotations. Describe scene, '
-            'composition, mood, palette, and format. Do not request text overlays, prices, discounts, inventory, availability, '
+            'composition, mood, palette, and format. The visual brief must include at least two concrete objects or visual cues '
+            'derived from the idea note or caption topic, in addition to any general reading props. Do not use only a generic book, '
+            'coffee, blanket, or bookshelf scene; if the brief could fit any unrelated book, rewrite it to show the specific topic. '
+            'Do not request text overlays, prices, discounts, inventory, availability, '
             'or delivery claims. No inventory claims.')
         prompt = json.dumps({
             "topic": post.payload,
