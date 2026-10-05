@@ -64,18 +64,13 @@ def generation_command(db, user, command):
                 if provider == "Creatify":
                     voiceover = post.payload.get("script") or post.payload["caption"]
                     direction = post.payload.get("videoDirection") or post.payload.get("mediaBrief") or ""
-                    brief = ("[VISUAL]\n"
-                             f"{direction}\n"
-                             "Make this a cinematic vertical social video with 3 distinct shots: an establishing shot, a close detail/action shot, "
-                             "and a closing shot. Use visible camera movement and a clear change in action or framing between shots. "
-                             "If the direction above asks for words or labels, ignore that part and show blank, unmarked props. "
-                             "Do not include any speech in this visual prompt.\n\n"
-                             "[SOUNDS]\n"
-                             "No extra speech or sound effects. The separately supplied voiceover audio is the only audio.\n\n"
-                             "[TEXT]\n"
-                             "None. Do not render any visible text, captions, subtitles, labels, signs, letters, numbers, or logos.\n\n"
-                             f"Brand style: {policy['voice']}. Follow these brand rules: {policy['rules']}. "
-                             "Use cinematic book-related b-roll, not a talking avatar.")
+                    # Keep the video prompt purely visual. Boreal has echoed negative
+                    # prompt instructions as both subtitles and narration, so avoid
+                    # sending prohibition lists, section labels, or voice directions.
+                    brief = (f"Cinematic vertical 9:16 book-related b-roll. {direction} "
+                             "Show three visually distinct shots with natural camera movement: a wide establishing view, "
+                             "a close detail with a clear physical action, and a closing view. "
+                             "Warm, polished editorial lighting; no talking avatar.")
                     duration = max(10, min(60, (len(voiceover.split()) * 60 + 139) // 140))
                 else:
                     # Give Predis both the post context and AI-authored visual direction.
