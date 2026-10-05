@@ -117,14 +117,16 @@ def predis_result(post_id: str, format_name: str):
     return None
 
 
-def creatify_create(script: str, title: str):
-    if not all((settings.creatify_api_id, settings.creatify_api_key, settings.creatify_avatar_id)):
-        raise ValueError("Set CREATIFY_API_ID, CREATIFY_API_KEY and an approved CREATIFY_AVATAR_ID first.")
-    return call("Creatify", "POST", "https://api.creatify.ai/api/lipsyncs/",
+def creatify_create(prompt: str, title: str, duration: int = 15):
+    if not all((settings.creatify_api_id, settings.creatify_api_key)):
+        raise ValueError("Set CREATIFY_API_ID and CREATIFY_API_KEY first.")
+    return call("Creatify", "POST", "https://api.creatify.ai/api/boreal/",
         headers={"X-API-ID": settings.creatify_api_id, "X-API-KEY": settings.creatify_api_key},
-        json={"name": title, "text": script, "creator": settings.creatify_avatar_id, "aspect_ratio": "9x16"})
+        json={"prompt": f"BookLender social video: {title}.\n{prompt}", "resolution": "720p",
+              "aspect_ratio": "9:16", "duration": max(10, min(60, int(duration))),
+              "negative_prompt": "on-screen text, subtitles, captions, logos, watermarks, misspelled words"})
 
 
 def creatify_result(job_id: str):
-    return call("Creatify", "GET", f"https://api.creatify.ai/api/lipsyncs/{job_id}/",
+    return call("Creatify", "GET", f"https://api.creatify.ai/api/boreal/{job_id}/",
         headers={"X-API-ID": settings.creatify_api_id, "X-API-KEY": settings.creatify_api_key})

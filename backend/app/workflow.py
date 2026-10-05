@@ -57,11 +57,18 @@ def generation_command(db, user, command):
                 if not save_checks(db, post)["passed"]:
                     raise HTTPException(422, "Resolve the brand violations before generating media.")
                 provider = "Creatify" if post.payload["format"] == "video" else "Predis"
-                configured = (settings.creatify_api_key and settings.creatify_api_id and settings.creatify_avatar_id) if provider == "Creatify" else (settings.predis_api_key and settings.predis_brand_id)
+                configured = (settings.creatify_api_key and settings.creatify_api_id) if provider == "Creatify" else (settings.predis_api_key and settings.predis_brand_id)
                 if not configured:
-                    raise HTTPException(503, f"Configure {provider} credentials and brand/avatar ID on Hostinger first.")
+                    requirement = "API credentials" if provider == "Creatify" else "API key and brand ID"
+                    raise HTTPException(503, f"Configure {provider} {requirement} on Hostinger first.")
                 if provider == "Creatify":
-                    brief = post.payload.get("script") or post.payload["caption"]
+                    voiceover = post.payload.get("script") or post.payload["caption"]
+                    direction = post.payload.get("videoDirection") or post.payload.get("mediaBrief") or ""
+                    brief = (f"Visual direction (show this; do not speak it): {direction}\n"
+                             f"Voiceover dialogue (speak these words and no other narration): {voiceover}\n"
+                             f"Style: {policy['voice']}\nRules: {policy['rules']}\n"
+                             "Use cinematic book-related b-roll, not a talking avatar. Do not render readable text or logos.")
+                    duration = max(10, min(60, (len(voiceover.split()) * 60 + 139) // 140))
                 else:
                     # Give Predis both the post context and AI-authored visual direction.
                     # Treat caption facts as context only; do not ask the image model to
@@ -79,7 +86,8 @@ def generation_command(db, user, command):
                         "Do not add text, quotes, prices, discounts, stock, availability, delivery, or other factual claims.",
                         "Do not imitate or invent an exact book cover. Use an uploaded approved cover only if one is provided.",
                     ))
-                queue(db, "media", provider, user.id, post.id, {"brief": brief, "brand": policy})
+                queue(db, "media", provider, user.id, post.id,
+                      {"brief": brief, "brand": policy, **({"duration": duration} if provider == "Creatify" else {})})
             else:
                 if post.stage not in ({"review"} if action == "revise" else {"selected"}):
                     raise HTTPException(409, "Pick an idea before generation, or revise a post in Review.")
@@ -127,7 +135,7 @@ def connections_dto(db):
                        "connected": bool(account and account.active), "detail": account.name if account else "Sync accounts, then select the correct publishing account."})
     for identifier, name, configured in (("openrouter", "OpenRouter", settings.openrouter_api_key and settings.openrouter_model),
                                        ("predis", "Predis", settings.predis_api_key and settings.predis_brand_id),
-                                       ("creatify", "Creatify", settings.creatify_api_key and settings.creatify_api_id and settings.creatify_avatar_id)):
+                                       ("creatify", "Creatify", settings.creatify_api_key and settings.creatify_api_id)):
         result.append({"id": identifier, "name": name, "purpose": "Generation", "connected": False,
                        "detail": "Configured; API access is verified when a job runs." if configured else "Server credentials missing."})
     return result

@@ -79,7 +79,7 @@ def execute_text(db, job, post):
         instruction += ' Return {"ideas":[{"title":"...","reason":"...","sourceIds":[1],"format":"image|carousel|video","platform":"Instagram|Facebook"}]}, at most 5 ideas. Every sourceIds value must identify a supplied topic; include at least one source per idea.'
         prompt = json.dumps(job.payload["topics"])
     else:
-        instruction += (' Return {"caption":"...","tags":"...","script":"...","mediaBrief":"..."}. '
+        instruction += (' Return {"caption":"...","tags":"...","script":"...","mediaBrief":"...","videoDirection":"..."}. '
             'Keep caption <= 2000 characters. Always create a useful mediaBrief from the idea title, its note, generated caption, '
             'and the selected format guidance; the user should not need to write it. Make the visual recognizably about the topic '
             'using safe symbolic objects, setting, and composition. For a named book, suggest themes or non-cover objects related '
@@ -91,7 +91,10 @@ def execute_text(db, job, post):
             'or delivery claims. For video posts, `script` is spoken voiceover only: write exactly the words the narrator should say. '
             'Never put shot directions, scene labels, camera instructions, montage notes, sound cues, or on-screen text in `script`. '
             'Do not include labels such as Opening shot, Cut to, Quick montage, Final shot, or Voiceover. '
-            'Keep any visual/action guidance out of the spoken script; this Creatify integration speaks the entire `script` field. '
+            'Keep any visual/action guidance out of the spoken script; the `script` field is narration only. For video posts, also '
+            'write `videoDirection` separately as a concise 9:16 visual plan with subject, actions, scene changes, camera movement, '
+            'lighting, and mood. Do not put dialogue or text overlays in `videoDirection`; it will guide Creatify Boreal visuals. '
+            'For the voiceover, aim for 25 to 40 spoken words so it fits a short social video. '
             'No inventory claims.')
         prompt = json.dumps({
             "topic": post.payload,
@@ -148,6 +151,7 @@ def execute_text(db, job, post):
         post.approved_version = None
         post.payload = {**post.payload, "caption": caption, "tags": str(data.get("tags", ""))[:500],
             "script": str(data.get("script", ""))[:5000], "mediaBrief": str(data.get("mediaBrief", ""))[:5000], "error": None}
+        post.payload["videoDirection"] = str(data.get("videoDirection") or data.get("mediaBrief") or "")[:5000]
         post.stage = "review"
         save_checks(db, post)
     job.status = "completed"
@@ -156,7 +160,7 @@ def execute_text(db, job, post):
 def execute_media(db, job, post):
     if not job.provider_id:
         if job.provider == "Creatify":
-            response = creatify_create(job.payload["brief"], post.payload["title"])
+            response = creatify_create(job.payload["brief"], post.payload["title"], job.payload.get("duration", 15))
             job.provider_id = response.get("id")
         else:
             job.provider_id = predis_create(job.payload["brief"], post.payload["format"])
@@ -168,8 +172,9 @@ def execute_media(db, job, post):
         response = creatify_result(job.provider_id)
         status = str(response.get("status", "")).lower()
         if status in {"failed", "error"}:
-            raise ValueError("Creatify generation failed. Check the provider job and credits before retrying.")
-        urls = [response["output"]] if status in {"done", "completed", "success"} and response.get("output") else []
+            raise ValueError(f"Creatify video generation failed: {response.get('failed_reason') or 'Check the provider job and credits before retrying.'}")
+        output_url = response.get("video_output") or response.get("output")
+        urls = [output_url] if status in {"done", "completed", "success"} and output_url else []
         job.result = {"credits": response.get("credits_used")}
     else:
         response = predis_result(job.provider_id, post.payload.get("format", "image"))

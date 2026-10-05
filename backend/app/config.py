@@ -32,7 +32,6 @@ class Settings(BaseSettings):
     predis_brand_id: str = ""
     creatify_api_id: str = ""
     creatify_api_key: str = ""
-    creatify_avatar_id: str = ""
     public_app_url: str = ""
     media_root: str = "/data/media"
     media_signing_key: str = ""

@@ -414,15 +414,15 @@ def mutate_post(db: Session, user: User, request: Request, command: dict) -> dic
     elif action == "update":
         if post.stage not in {"selected", "review"}:
             raise HTTPException(status_code=409, detail="Drafts can only be edited after picking an idea")
-        changed = {key: command[key].strip() for key in ("caption", "tags", "script", "mediaBrief") if isinstance(command.get(key), str)}
+        changed = {key: command[key].strip() for key in ("caption", "tags", "script", "mediaBrief", "videoDirection") if isinstance(command.get(key), str)}
         if not changed:
             raise HTTPException(status_code=422, detail="Add a caption or tags before saving")
         if "caption" in changed and (not changed["caption"] or len(changed["caption"]) > 5000):
             raise HTTPException(status_code=422, detail="Caption must contain 1 to 5,000 characters")
         if "tags" in changed and len(changed["tags"]) > 500:
             raise HTTPException(status_code=422, detail="Hashtags must be 500 characters or fewer")
-        if any(len(changed.get(key, "")) > 5000 for key in ("script", "mediaBrief")):
-            raise HTTPException(422, "Script and media brief must be 5,000 characters or fewer")
+        if any(len(changed.get(key, "")) > 5000 for key in ("script", "mediaBrief", "videoDirection")):
+            raise HTTPException(422, "Script and media directions must be 5,000 characters or fewer")
         post.version_history = [*post.version_history, {"version": post.version, "payload": dict(post.payload), "reason": "Content edited", "at": datetime.now(UTC).isoformat()}]
         post.version += 1
         post.approved_version = None

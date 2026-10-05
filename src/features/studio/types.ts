@@ -21,6 +21,7 @@ export interface Post {
   cost?: number;
   caption?: string;
   script?: string;
+  videoDirection?: string;
   mediaBrief?: string;
   tags?: string;
   warning?: string;
