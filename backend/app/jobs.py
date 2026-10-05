@@ -88,7 +88,11 @@ def execute_text(db, job, post):
             'derived from the idea note or caption topic, in addition to any general reading props. Do not use only a generic book, '
             'coffee, blanket, or bookshelf scene; if the brief could fit any unrelated book, rewrite it to show the specific topic. '
             'Do not request text overlays, prices, discounts, inventory, availability, '
-            'or delivery claims. No inventory claims.')
+            'or delivery claims. For video posts, `script` is spoken voiceover only: write exactly the words the narrator should say. '
+            'Never put shot directions, scene labels, camera instructions, montage notes, sound cues, or on-screen text in `script`. '
+            'Do not include labels such as Opening shot, Cut to, Quick montage, Final shot, or Voiceover. '
+            'Keep any visual/action guidance out of the spoken script; this Creatify integration speaks the entire `script` field. '
+            'No inventory claims.')
         prompt = json.dumps({
             "topic": post.payload,
             "book_or_topic_title": post.payload.get("title", ""),
