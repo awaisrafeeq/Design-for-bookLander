@@ -80,13 +80,16 @@ def execute_text(db, job, post):
         prompt = json.dumps(job.payload["topics"])
     else:
         instruction += (' Return {"caption":"...","tags":"...","script":"...","mediaBrief":"..."}. '
-            'Keep caption <= 2000 characters. Always create a useful mediaBrief from the topic title and generated caption; '
-            'the user should not need to write it. Describe only visual scene, composition, mood, palette and format. '
-            'Do not request text overlays, exact cover art, quotes, prices, discounts, inventory, availability or delivery claims. '
-            'Do not invent book-specific visual details. No inventory claims.')
+            'Keep caption <= 2000 characters. Always create a useful mediaBrief from the idea title, its note, generated caption, '
+            'and the selected format guidance; the user should not need to write it. Make the visual recognizably about the topic '
+            'using safe symbolic objects, setting, and composition. For a named book, suggest themes or non-cover objects related '
+            'to its supplied topic context, but do not invent plot details, characters, cover art, or quotations. Describe scene, '
+            'composition, mood, palette, and format. Do not request text overlays, prices, discounts, inventory, availability, '
+            'or delivery claims. No inventory claims.')
         prompt = json.dumps({
             "topic": post.payload,
             "book_or_topic_title": post.payload.get("title", ""),
+            "idea_note": post.payload.get("note", ""),
             "caption_context": post.payload.get("caption", ""),
             "revision": job.payload.get("note"),
             "formatGuidance": policy["formats"],

@@ -69,9 +69,11 @@ def generation_command(db, user, command):
                     brief = "\n".join((
                         "Create one social image for BookLender using the following brief.",
                         f"Book/topic: {post.payload.get('title', '')}",
+                        f"Additional idea input: {post.payload.get('note', '')}",
                         f"Caption context (do not copy claims or quotes into the image): {post.payload.get('caption', '')}",
                         f"Hashtags/context: {post.payload.get('tags', '')}",
                         f"Visual direction: {post.payload.get('mediaBrief') or post.payload.get('caption', '')}",
+                        f"Style guidance for {post.payload.get('format', 'image')}: {(policy.get('formats') or {}).get(post.payload.get('format', 'image'), {}).get('guidance', '')}",
                         f"Brand voice: {policy['voice']}",
                         f"Brand rules: {policy['rules']}",
                         "Do not add text, quotes, prices, discounts, stock, availability, delivery, or other factual claims.",
