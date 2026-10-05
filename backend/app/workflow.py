@@ -60,9 +60,24 @@ def generation_command(db, user, command):
                 configured = (settings.creatify_api_key and settings.creatify_api_id and settings.creatify_avatar_id) if provider == "Creatify" else (settings.predis_api_key and settings.predis_brand_id)
                 if not configured:
                     raise HTTPException(503, f"Configure {provider} credentials and brand/avatar ID on Hostinger first.")
-                brief = post.payload.get("script") if provider == "Creatify" else post.payload.get("mediaBrief")
-                brief = brief or post.payload["caption"]
-                queue(db, "media", provider, user.id, post.id, {"brief": f"{policy['voice']}\n{brief}\nRules: {policy['rules']}" if provider == "Predis" else brief, "brand": policy})
+                if provider == "Creatify":
+                    brief = post.payload.get("script") or post.payload["caption"]
+                else:
+                    # Give Predis both the post context and AI-authored visual direction.
+                    # Treat caption facts as context only; do not ask the image model to
+                    # reproduce claims or text that a human has not verified.
+                    brief = "\n".join((
+                        "Create one social image for BookLender using the following brief.",
+                        f"Book/topic: {post.payload.get('title', '')}",
+                        f"Caption context (do not copy claims or quotes into the image): {post.payload.get('caption', '')}",
+                        f"Hashtags/context: {post.payload.get('tags', '')}",
+                        f"Visual direction: {post.payload.get('mediaBrief') or post.payload.get('caption', '')}",
+                        f"Brand voice: {policy['voice']}",
+                        f"Brand rules: {policy['rules']}",
+                        "Do not add text, quotes, prices, discounts, stock, availability, delivery, or other factual claims.",
+                        "Do not imitate or invent an exact book cover. Use an uploaded approved cover only if one is provided.",
+                    ))
+                queue(db, "media", provider, user.id, post.id, {"brief": brief, "brand": policy})
             else:
                 if post.stage not in ({"review"} if action == "revise" else {"selected"}):
                     raise HTTPException(409, "Pick an idea before generation, or revise a post in Review.")
