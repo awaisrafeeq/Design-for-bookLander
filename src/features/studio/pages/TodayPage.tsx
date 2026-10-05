@@ -2,7 +2,7 @@
 import Link from 'next/link';
 import { useStudio } from '../components/StudioProvider';
 import { Cover, DueChip, Header, Icon, Meta, Meter, SourceChip, VersionChip, money } from '../components/Design';
-import { byTime, dayParts, used } from '../domain';
+import { byTime, dayParts, formatEasternDate, used } from '../domain';
 
 const words = ['No','One','Two','Three','Four','Five','Six','Seven','Eight','Nine'];
 const countWord = (count: number) => words[count] || String(count);
@@ -14,7 +14,7 @@ export default function TodayPage() {
   const ideas = state.posts.filter(post=>post.stage==='idea');
   const selected = state.posts.filter(post=>post.stage==='selected');
   const date = dayParts(0);
-  const longDate = new Date().toLocaleDateString('en-US', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'America/New_York' });
+  const longDate = formatEasternDate(new Date());
   return <>
     <section className="lede" aria-label="Summary for today"><span className="date">{longDate || `${date.wd} ${date.d} ${date.m}`}</span><p>{review.length ? <><Link href="/review" className="n-need">{countWord(review.length)} {review.length===1?'post':'posts'}</Link> {review.length===1?'waits':'wait'} for your approval.</> : 'Nothing is waiting for your approval.'}{errors.length > 0 && <> <Link href="/logs" className="n-err">{countWord(errors.length)} {errors.length===1?'post':'posts'}</Link> need attention. {errors[0].error}</>} {today.filter(post=>post.stage==='scheduled'&&!post.error&&['queued','scheduled','publishing'].includes(post.publicationStatus||'')).length ? `${countWord(today.filter(post=>post.stage==='scheduled'&&!post.error&&['queued','scheduled','publishing'].includes(post.publicationStatus||'')).length)} scheduled today; next at ${today.find(post=>post.stage==='scheduled'&&!post.error&&['queued','scheduled','publishing'].includes(post.publicationStatus||''))?.time}.` : 'No confirmed publication is scheduled for today.'}</p></section>
     <div className="tiles"><Link className={`tile ${review.length?'need':'calm'}`} href="/review"><span className="ti"><Icon name="eye"/></span><b>{review.length}</b><span>To approve</span></Link><Link className={`tile ${errors.length?'err':'calm'}`} href="/logs"><span className="ti"><Icon name="alert"/></span><b>{errors.length}</b><span>{errors.length===1?'Error':'Errors'}</span></Link><Link className="tile calm" href="/schedule"><span className="ti"><Icon name="cal"/></span><b>{today.length}</b><span>Calendar today</span></Link><Link className="tile" href="/spend"><span className="ti" style={{background:'var(--aibg)',color:'var(--ai)'}}><Icon name="spark"/></span><b className="num">{money(used(state))}</b><span>recorded today</span><Meter/><span className="sub num">Budget enforcement pending</span></Link></div>

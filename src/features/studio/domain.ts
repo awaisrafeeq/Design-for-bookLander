@@ -1,4 +1,5 @@
 import type { Book, Format, Post, StudioState, TeamMember } from './types';
+export const BUSINESS_TIME_ZONE = 'America/New_York';
 export const stages = [
   { id: 'idea', label: 'Ideas', who: 'both', hint: 'AI suggests. Team adds.' },
   { id: 'selected', label: 'Selected', who: 'team', hint: 'Team picks. Rest dropped.' },
@@ -24,13 +25,21 @@ export const used = (state: StudioState) => state.spend.text + state.spend.video
 export const spendStatus = (state: StudioState) => used(state) >= state.spend.cap ? 'stop' : used(state) / state.spend.cap >= .8 ? 'near' : 'ok';
 export const atRisk = (post: Post) => !['published', 'archived', 'scheduled'].includes(post.stage) && post.eventDays != null && post.eventDays <= 3;
 export const byTime = (a: Post, b: Post) => ((a.day || 0) - (b.day || 0)) || String(a.time).localeCompare(String(b.time));
+export function formatEasternDate(value: string | Date) {
+  const date = value instanceof Date ? value : new Date(value);
+  const parts = new Intl.DateTimeFormat('en-US', { timeZone: BUSINESS_TIME_ZONE, year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(date);
+  const part = (key: string) => parts.find(item => item.type === key)?.value || '';
+  return `${part('month')}/${part('day')}/${part('year')}`;
+}
 export function dayParts(offset = 0) {
-  const parts = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', year: 'numeric', month: 'numeric', day: 'numeric' }).formatToParts(new Date());
+  const parts = new Intl.DateTimeFormat('en-US', { timeZone: BUSINESS_TIME_ZONE, year: 'numeric', month: 'numeric', day: 'numeric' }).formatToParts(new Date());
   const value = (key: string) => Number(parts.find(part=>part.type===key)?.value);
   const date = new Date(Date.UTC(value('year'), value('month')-1, value('day')+offset, 12));
   return { wd: date.toLocaleDateString('en-US', { weekday: 'short', timeZone: 'UTC' }), d: date.getUTCDate(), m: date.toLocaleDateString('en-US', { month: 'short', timeZone: 'UTC' }) };
 }
 export function dayLabel(offset = 0) {
   if (!offset) return 'Today'; if (offset === 1) return 'Tomorrow'; if (offset === -1) return 'Yesterday';
-  const p = dayParts(offset); return `${p.wd} ${p.d} ${p.m}`;
+  const parts = new Intl.DateTimeFormat('en-US', { timeZone: BUSINESS_TIME_ZONE, year: 'numeric', month: 'numeric', day: 'numeric' }).formatToParts(new Date());
+  const value = (key: string) => Number(parts.find(part => part.type === key)?.value);
+  return formatEasternDate(new Date(Date.UTC(value('year'), value('month') - 1, value('day') + offset, 12)));
 }
