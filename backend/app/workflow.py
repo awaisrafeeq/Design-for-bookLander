@@ -64,10 +64,19 @@ def generation_command(db, user, command):
                 if provider == "Creatify":
                     voiceover = post.payload.get("script") or post.payload["caption"]
                     direction = post.payload.get("videoDirection") or post.payload.get("mediaBrief") or ""
-                    brief = (f"Visual direction (show this; do not speak it): {direction}\n"
-                             f"Voiceover dialogue (speak these words and no other narration): {voiceover}\n"
-                             f"Style: {policy['voice']}\nRules: {policy['rules']}\n"
-                             "Use cinematic book-related b-roll, not a talking avatar. Do not render readable text or logos.")
+                    brief = ("[VISUAL]\n"
+                             f"{direction}\n"
+                             "Make this a cinematic vertical social video with 3 distinct shots: an establishing shot, a close detail/action shot, "
+                             "and a closing shot. Use visible camera movement and a clear change in action or framing between shots. "
+                             "Show the requested objects without writing, labels, signs, or text on them. Do not create subtitles or graphic overlays.\n\n"
+                             "[SPEECH]\n"
+                             f"Speak this voiceover verbatim and only once: \"{voiceover}\"\n\n"
+                             "[SOUNDS]\n"
+                             "Quiet natural room tone only. No extra spoken words.\n\n"
+                             "[TEXT]\n"
+                             "None. Do not render any visible text, captions, subtitles, labels, signs, letters, numbers, or logos.\n\n"
+                             f"Brand style: {policy['voice']}. Follow these brand rules: {policy['rules']}. "
+                             "Use cinematic book-related b-roll, not a talking avatar.")
                     duration = max(10, min(60, (len(voiceover.split()) * 60 + 139) // 140))
                 else:
                     # Give Predis both the post context and AI-authored visual direction.

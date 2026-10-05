@@ -93,7 +93,9 @@ def execute_text(db, job, post):
             'Do not include labels such as Opening shot, Cut to, Quick montage, Final shot, or Voiceover. '
             'Keep any visual/action guidance out of the spoken script; the `script` field is narration only. For video posts, also '
             'write `videoDirection` separately as a concise 9:16 visual plan with subject, actions, scene changes, camera movement, '
-            'lighting, and mood. Do not put dialogue or text overlays in `videoDirection`; it will guide Creatify Boreal visuals. '
+            'lighting, and mood. For video, describe 3 distinct shots (establishing, close detail/action, closing), with a visible action '
+            'or framing change in each. Do not request any visible writing: no words on props, labels, signs, title cards, captions, or text overlays. '
+            'Do not put dialogue or text overlays in `videoDirection`; it will guide Creatify Boreal visuals. '
             'For the voiceover, aim for 25 to 40 spoken words so it fits a short social video. '
             'No inventory claims.')
         prompt = json.dumps({

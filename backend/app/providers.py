@@ -122,9 +122,9 @@ def creatify_create(prompt: str, title: str, duration: int = 15):
         raise ValueError("Set CREATIFY_API_ID and CREATIFY_API_KEY first.")
     return call("Creatify", "POST", "https://api.creatify.ai/api/boreal/",
         headers={"X-API-ID": settings.creatify_api_id, "X-API-KEY": settings.creatify_api_key},
-        json={"prompt": f"BookLender social video: {title}.\n{prompt}", "resolution": "720p",
+        json={"prompt": f"BookLender social video: {title}.\n\n{prompt}", "resolution": "720p",
               "aspect_ratio": "9:16", "duration": max(10, min(60, int(duration))),
-              "negative_prompt": "on-screen text, subtitles, captions, logos, watermarks, misspelled words"})
+              "negative_prompt": "Any visible text or typography, subtitles, captions, title cards, labels, signs, letters, words, numbers, logos, watermarks, gibberish text, misspelled words"})
 
 
 def creatify_result(job_id: str):
