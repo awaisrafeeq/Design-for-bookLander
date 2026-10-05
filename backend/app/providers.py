@@ -5,9 +5,15 @@ from app.config import settings
 
 
 class ProviderError(Exception):
-    def __init__(self, provider: str, status: int = 0, *, ambiguous: bool = False):
+    def __init__(self, provider: str, status: int = 0, *, operation: str | None = None,
+                 detail: str | None = None, ambiguous: bool = False):
         self.provider, self.status, self.ambiguous = provider, status, ambiguous
-        super().__init__(f"{provider}: " + (f"HTTP {status}" if status else "connection interrupted"))
+        self.operation, self.detail = operation, detail
+        label = f"{provider} {operation}" if operation else provider
+        message = f"{label}: " + (f"HTTP {status}" if status else "connection interrupted")
+        if detail:
+            message += f" — {detail}"
+        super().__init__(message[:500])
 
     @property
     def fix(self):
@@ -20,22 +26,39 @@ class ProviderError(Exception):
                     self.status, "Check provider availability and configuration, then retry.")
 
 
-def call(provider: str, method: str, url: str, **kwargs) -> dict:
+def call(provider: str, method: str, url: str, *, operation: str | None = None, **kwargs) -> dict:
     try:
         with httpx.Client(timeout=90, follow_redirects=False) as client:
             response = client.request(method, url, **kwargs)
     except httpx.RequestError as exc:
-        raise ProviderError(provider, ambiguous=method == "POST") from exc
+        raise ProviderError(provider, operation=operation, ambiguous=method == "POST") from exc
     if not response.is_success:
-        raise ProviderError(provider, response.status_code, ambiguous=method == "POST" and response.status_code >= 500)
+        detail = None
+        try:
+            data = response.json()
+            if isinstance(data, dict):
+                detail = next((str(data[key]) for key in ("detail", "error", "message", "failed_reason") if data.get(key)), None)
+                if detail is None and data.get("errors"):
+                    detail = json.dumps(data["errors"], ensure_ascii=True)
+            elif isinstance(data, list):
+                detail = json.dumps(data, ensure_ascii=True)
+        except ValueError:
+            detail = response.text
+        if detail:
+            detail = " ".join(detail.split())[:240]
+            for secret in (settings.creatify_api_id, settings.creatify_api_key):
+                if secret:
+                    detail = detail.replace(secret, "[redacted]")
+        raise ProviderError(provider, response.status_code, operation=operation, detail=detail,
+                            ambiguous=method == "POST" and response.status_code >= 500)
     if response.status_code == 204 or (method == "DELETE" and not response.content):
         return {}
     try:
         data = response.json()
     except ValueError as exc:
-        raise ProviderError(provider, ambiguous=method == "POST") from exc
+        raise ProviderError(provider, operation=operation, ambiguous=method == "POST") from exc
     if not isinstance(data, dict):
-        raise ProviderError(provider)
+        raise ProviderError(provider, operation=operation)
     return data
 
 
@@ -122,12 +145,13 @@ def creatify_tts_create(script: str):
         raise ValueError("Set CREATIFY_API_ID and CREATIFY_API_KEY first.")
     return call("Creatify", "POST", "https://api.creatify.ai/api/text_to_speech/",
         headers={"X-API-ID": settings.creatify_api_id, "X-API-KEY": settings.creatify_api_key},
-        json={"script": script})
+        json={"script": script}, operation="TTS create")
 
 
 def creatify_tts_result(job_id: str):
     return call("Creatify", "GET", f"https://api.creatify.ai/api/text_to_speech/{job_id}/",
-        headers={"X-API-ID": settings.creatify_api_id, "X-API-KEY": settings.creatify_api_key})
+        headers={"X-API-ID": settings.creatify_api_id, "X-API-KEY": settings.creatify_api_key},
+        operation="TTS status")
 
 
 def creatify_create(prompt: str, audio_url: str, duration: int = 15):
@@ -137,9 +161,11 @@ def creatify_create(prompt: str, audio_url: str, duration: int = 15):
         headers={"X-API-ID": settings.creatify_api_id, "X-API-KEY": settings.creatify_api_key},
         json={"prompt": prompt, "audio_url": audio_url, "resolution": "720p",
               "aspect_ratio": "9:16", "duration": max(10, min(60, int(duration))),
-              "negative_prompt": "Any visible text or typography, subtitles, captions, title cards, labels, signs, letters, words, numbers, logos, watermarks, gibberish text, misspelled words"})
+              "negative_prompt": "Any visible text or typography, subtitles, captions, title cards, labels, signs, letters, words, numbers, logos, watermarks, gibberish text, misspelled words"},
+        operation="Boreal create")
 
 
 def creatify_result(job_id: str):
     return call("Creatify", "GET", f"https://api.creatify.ai/api/boreal/{job_id}/",
-        headers={"X-API-ID": settings.creatify_api_id, "X-API-KEY": settings.creatify_api_key})
+        headers={"X-API-ID": settings.creatify_api_id, "X-API-KEY": settings.creatify_api_key},
+        operation="Boreal status")
