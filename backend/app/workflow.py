@@ -202,6 +202,8 @@ def schedule_command(db, user, command):
     action = command.get("action")
     if action not in {"save", "cancel", "retry"}:
         raise HTTPException(422, "Choose save, cancel or retry for a schedule.")
+    if action == "save" and post.approved_version != post.version:
+        raise HTTPException(409, "Approve the current version before scheduling it.")
     if action == "cancel":
         require_permission(user, "publish.send")
         for target in targets:

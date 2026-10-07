@@ -1,5 +1,6 @@
 /* BookLender Studio: paper, ink and bookcloth navy. Radius scale: 3 chips, 4 controls, 6 panels, 8 large surfaces. */
 :root{
+ color-scheme:light;
  --bg:#F6F4EF;--surf:#FFFFFF;--raise:#FBFAF7;--sunk:#EFECE5;--line:#E2DCD1;--line2:#ECE7DF;
  --ink:#1C1A17;--ink2:#4B463F;--mute:#736C63;
  --brand:#23395B;--brandtx:#FFFFFF;--brandsoft:#E7EBF2;
@@ -12,14 +13,6 @@
  --serif:"Literata",Georgia,"Times New Roman",serif;
  --sans:"IBM Plex Sans",-apple-system,"Segoe UI",system-ui,sans-serif;
 }
-@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){color-scheme:dark;
- --bg:#161412;--surf:#1F1D1A;--raise:#1B1916;--sunk:#282520;--line:#37322C;--line2:#2D2A25;
- --ink:#EFEBE4;--ink2:#C0B9AE;--mute:#978F83;
- --brand:#C8D4E7;--brandtx:#161412;--brandsoft:#28313F;
- --ai:#B6A8F3;--aibg:#2A2640;--ailine:#5C5096;
- --need:#E6B45E;--needbg:#372915;--ok:#72C99A;--okbg:#1B2E23;--err:#EF8C82;--errbg:#3A1E1B;
- --autoc:#ABA398;--autobg:#2A2723;--scrim:rgba(0,0,0,.55);
- --lift:0 1px 2px rgba(0,0,0,.35),0 12px 30px rgba(0,0,0,.35)}}
 :root[data-theme="dark"]{color-scheme:dark;
  --bg:#161412;--surf:#1F1D1A;--raise:#1B1916;--sunk:#282520;--line:#37322C;--line2:#2D2A25;
  --ink:#EFEBE4;--ink2:#C0B9AE;--mute:#978F83;
