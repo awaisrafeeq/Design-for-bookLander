@@ -20,6 +20,17 @@ from app.workflow import generation_command, connections_dto, schedule_command, 
 
 router = APIRouter(prefix="/studio", tags=["studio settings"])
 
+
+def clear_post_schedule(db: Session, post: StudioPost) -> None:
+    """Drop a held slot when an approved draft is reopened or changed."""
+    for target in db.scalars(select(Publication).where(
+        Publication.post_id == post.id, Publication.status == "held"
+    )).all():
+        target.status = "cancelled"
+    post.payload = {**post.payload, "scheduledAt": None, "day": None, "time": None,
+                    "publicationStatus": None, "approvedBy": None, "approvedPlatforms": None,
+                    "scheduleRequestedBy": None, "autoSendAuthorized": False}
+
 ROLE_TO_API = {
     "Super admin": "admin",
     "Campaigns manager": "campaigns_manager",
@@ -352,6 +363,7 @@ def mutate_post(db: Session, user: User, request: Request, command: dict) -> dic
         targets = db.scalars(select(Publication).where(Publication.post_id == post.id, Publication.status != "cancelled")).all()
         if any(t.provider_id or t.status != "held" for t in targets):
             raise HTTPException(409, "Cancel the provider schedule and wait for confirmation before editing this post.")
+        clear_post_schedule(db, post)
         post.stage = "review"
         post.approved_version = None
         message = "Reopened for editing. Approval is required again."
@@ -440,6 +452,7 @@ def mutate_post(db: Session, user: User, request: Request, command: dict) -> dic
         snapshot_post(post, "Content edited")
         post.version += 1
         post.approved_version = None
+        clear_post_schedule(db, post)
         post.payload = {**post.payload, **changed, "versionReason": "Content edited"}
         post.stage = editable_stage(post)
         save_checks(db, post)
