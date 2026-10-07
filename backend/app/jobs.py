@@ -31,6 +31,14 @@ def editable_stage(post):
     return "review" if post.payload.get("media") else "selected"
 
 
+def workflow_stage(post):
+    if post.stage == "review" and not post.payload.get("media"):
+        return "selected"
+    if post.stage == "scheduled" and not post.payload.get("scheduledAt"):
+        return editable_stage(post)
+    return post.stage
+
+
 def brand_snapshot(db):
     policy = db.scalar(select(BrandPolicyVersion).where(BrandPolicyVersion.active.is_(True)).order_by(BrandPolicyVersion.version.desc()))
     if not policy:
@@ -320,6 +328,7 @@ def execute_publish(db, job, post):
         db.flush()
         remaining = db.scalar(select(Publication.id).where(Publication.post_id == post.id, Publication.status != "cancelled"))
         if not remaining:
+            post.stage = editable_stage(post)
             post.payload = {**post.payload, "publicationStatus": "held", "scheduledAt": None, "day": None, "time": None}
         else:
             targets = list(db.scalars(select(Publication).where(Publication.post_id == post.id, Publication.status != "cancelled")))

@@ -13,10 +13,10 @@ from app.auth import get_current_session, require_csrf
 from app.db import get_db
 from app.models import AuditEvent, AuthSession, BrandPolicyVersion, BrandRule, Invitation, SourceSetting, SpendEntry, SpendSettings, StudioPost, User
 from app.security import hash_password, hash_session_token
-from app.jobs import ACTIVE, job_dto, save_checks, snapshot_post, editable_stage
+from app.jobs import ACTIVE, job_dto, save_checks, snapshot_post, editable_stage, workflow_stage
 from app.models import WorkJob, Publication
 from app.permissions import PERMISSIONS, effective_permissions, require_permission
-from app.workflow import generation_command, connections_dto, release_approved, schedule_command, sync_accounts, accounts_dto
+from app.workflow import generation_command, connections_dto, schedule_command, sync_accounts, accounts_dto
 
 router = APIRouter(prefix="/studio", tags=["studio settings"])
 
@@ -222,7 +222,7 @@ def post_dto(post: StudioPost) -> dict:
         local = datetime.fromisoformat(payload["scheduledAt"]).astimezone(ZoneInfo("America/New_York"))
         payload["day"] = (local.date() - datetime.now(ZoneInfo("America/New_York")).date()).days
         payload["time"] = local.strftime("%H:%M")
-    stage = "selected" if post.stage == "review" and not payload.get("media") else post.stage
+    stage = workflow_stage(post)
     return {**payload, "id": post.id, "stage": stage, "version": post.version,
             "history": [{"version": item.get("version"), "reason": item.get("reason", "Updated"), "note": item.get("note", ""),
                          "stage": item.get("stage"), "at": item.get("at"), "payload": item.get("payload")}
@@ -314,7 +314,10 @@ def mutate_post(db: Session, user: User, request: Request, command: dict) -> dic
             raise HTTPException(status_code=422, detail="Type a topic first")
         if len(title) > 180:
             raise HTTPException(status_code=422, detail="Topic must be 180 characters or fewer")
-        payload = {**POST_DEFAULTS, "title": title}
+        note = command.get("note", "")
+        if not isinstance(note, str) or len(note.strip()) > 1000:
+            raise HTTPException(422, "Optional input must be 1,000 characters or fewer")
+        payload = {**POST_DEFAULTS, "title": title, "note": note.strip()}
         post = StudioPost(stage="idea", version=1, payload=payload, version_history=[], created_by=user.id, updated_by=user.id)
         db.add(post)
         db.flush()
@@ -329,8 +332,7 @@ def mutate_post(db: Session, user: User, request: Request, command: dict) -> dic
     post = db.scalar(select(StudioPost).where(StudioPost.id == post_id).with_for_update())
     if post is None:
         raise HTTPException(status_code=404, detail="Post not found")
-    if post.stage == "review" and not post.payload.get("media"):
-        post.stage = "selected"
+    post.stage = workflow_stage(post)
     if db.scalar(select(WorkJob.id).where(WorkJob.post_id == post.id, WorkJob.status.in_(ACTIVE))):
         raise HTTPException(409, "Wait for the current background job before changing this post.")
     if action == "update" and post.stage == "review" and user.role != "admin" and "Review" not in user.module_access:
@@ -345,7 +347,7 @@ def mutate_post(db: Session, user: User, request: Request, command: dict) -> dic
 
     message = ""
     if action == "reopen":
-        if post.stage != "scheduled":
+        if post.stage != "scheduled" and not (post.stage == "review" and post.approved_version == post.version):
             raise HTTPException(409, "Only an approved post can be reopened.")
         targets = db.scalars(select(Publication).where(Publication.post_id == post.id, Publication.status != "cancelled")).all()
         if any(t.provider_id or t.status != "held" for t in targets):
@@ -453,11 +455,10 @@ def mutate_post(db: Session, user: User, request: Request, command: dict) -> dic
         if not save_checks(db, post)["passed"]:
             db.commit()
             raise HTTPException(422, "Resolve the brand violations before approval.")
-        post.stage = "scheduled"
+        post.stage = "review"
         post.approved_version = post.version
         post.payload = {**post.payload, "approvedBy": user.name, "approvedPlatforms": post.payload.get("platforms", [post.payload["platform"]])}
-        release_approved(db, post)
-        message = "Approved. Posts with an authorized schedule are queued for Zernio."
+        message = "Approved. Choose a posting slot and save the schedule to move this post to Scheduled."
     else:
         raise HTTPException(status_code=422, detail="Unknown post command")
 

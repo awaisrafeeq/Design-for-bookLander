@@ -6,7 +6,7 @@ from fastapi import HTTPException
 from sqlalchemy import select
 
 from app.config import settings
-from app.jobs import ACTIVE, brand_snapshot, queue, save_checks, schedule_job, editable_stage
+from app.jobs import ACTIVE, brand_snapshot, queue, save_checks, schedule_job, editable_stage, workflow_stage
 from app.models import ProviderAccount, Publication, StudioPost, User, WorkJob
 from app.permissions import effective_permissions, require_permission
 from app.providers import ProviderError, Zernio
@@ -39,8 +39,7 @@ def generation_command(db, user, command):
         if not posts:
             raise HTTPException(404, "No picked posts found")
         for post in posts:
-            if post.stage == "review" and not post.payload.get("media"):
-                post.stage = "selected"
+            post.stage = workflow_stage(post)
             if action == "generate-all" and post.stage != "selected":
                 continue
             if db.scalar(select(WorkJob.id).where(WorkJob.post_id == post.id, WorkJob.status.in_(ACTIVE))):
@@ -185,6 +184,7 @@ def schedule_command(db, user, command):
         raise HTTPException(422, "Choose a valid post") from None
     if not post:
         raise HTTPException(404, "Post not found")
+    post.stage = workflow_stage(post)
     if command.get("version") != post.version:
         raise HTTPException(409, "This post changed. Refresh before scheduling.")
     if post.stage not in {"review", "scheduled"}:
@@ -220,6 +220,8 @@ def schedule_command(db, user, command):
         status = "cancelling" if any(t.status == "cancelling" for t in targets) else "published" if any(t.status == "published" for t in targets) else "held"
         if status == "published":
             post.stage = "published"
+        else:
+            post.stage = editable_stage(post)
         post.payload = {**post.payload, "scheduledAt": None, "day": None, "time": None, "publicationStatus": status}
     elif action == "retry":
         require_permission(user, "publish.send")
@@ -286,6 +288,7 @@ def schedule_command(db, user, command):
         post.payload = {**post.payload, "scheduledAt": scheduled_at.isoformat(), "platforms": platforms,
                         "scheduleRequestedBy": str(user.id), "autoSendAuthorized": effective_permissions(user).get("publish.send", False),
                         "publicationStatus": "queued" if post.approved_version == post.version and effective_permissions(user).get("publish.send") else "held"}
+        post.stage = "scheduled" if post.approved_version == post.version else "review"
     db.commit()
     return {"message": "Schedule saved. Only approved versions with publishing permission are sent to Zernio."}
 

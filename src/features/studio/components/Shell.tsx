@@ -24,7 +24,7 @@ function PostDrawer({ post }: { post: Post }) {
   const stage = shown.stage === 'published' ? 'Published' : shown.stage === 'archived' ? 'Archive' : shown.stage[0].toUpperCase() + shown.stage.slice(1);
   const act = (action: string) => { void command('posts',{action,id:post.id,version:post.version}).then(ok=>{if(ok)openPost(null)}); };
   return <><div className="scrim" onClick={() => openPost(null)}/><aside className="drawer" role="dialog" aria-modal="true" aria-label={post.title}><div className="dh"><span className="chip">{stage}</span>{post.stage !== 'archived' && post.stage !== 'published' && <Who kind={post.stage === 'idea' || post.stage === 'revision' ? 'both' : post.stage === 'selected' || post.stage === 'review' ? 'team' : post.stage === 'scheduled' ? 'auto' : 'ai'}/>}<button className="iconbtn x" onClick={() => openPost(null)} aria-label="Close"><Icon name="x"/></button></div>
-    {(shown.media?.length || ['generating','revision'].includes(shown.stage)) ? <div className={`prev ${shown.format === 'video' ? 'video':'sq'}`}><Media post={shown}/></div> : null}
+    {(shown.media?.length || ['generating','revision'].includes(shown.stage)) ? <div className={`prev ${['generating','revision'].includes(shown.stage) ? 'processing' : shown.format === 'video' ? 'video':'sq'}`}><Media post={shown}/></div> : null}
     <h2>{shown.title}</h2><div className="ft" style={{display:'flex',gap:6,flexWrap:'wrap'}}><SourceChip post={shown}/><FormatChip post={shown}/><PlatformChip post={shown}/><DueChip post={shown}/></div>
     {shown.reason && <div className="why"><Icon name={shown.human ? 'user':'spark'}/><span><small>{shown.human ? 'Added by a person' : 'Why AI suggested it'}</small>{shown.reason}{shown.event ? ` · ${shown.event}`:''}</span></div>}
     {shown.error && <dl className="fixbox"><dt>Problem</dt><dd>{shown.error}</dd><dt>Fix</dt><dd>Open Logs for the cause, recommended fix and retry options.</dd></dl>}
@@ -39,11 +39,12 @@ function PostDrawer({ post }: { post: Post }) {
 function ShellContent({ children }: { children: React.ReactNode }) {
   const pathname = usePathname(); const router = useRouter(); const { state, drawerId, openPost } = useStudio(); const [more, setMore] = useState(false);
   const title = groups.flatMap(group=>group.links).find(item=>item[3]===pathname)?.[2] || 'Today';
-  const review = state.posts.filter(post=>post.stage==='review').length;
+  const review = state.posts.filter(post=>post.stage==='review' && post.approvedVersion !== post.version).length;
+  const reviewQueue = state.posts.filter(post=>post.stage==='review').length;
   const errors = state.posts.filter(post=>post.error).length;
   const ideas = state.posts.filter(post=>post.stage==='idea').length;
   const unresolved = state.activity.filter(item=>item.level==='error'&&!item.done).length;
-  const badge = (id:string) => id === 'review' && review ? <span className="bd need">{review}</span> : id === 'logs' && unresolved ? <span className="bd err">{unresolved}</span> : id === 'ideas' && ideas ? <span className="bd ai">{ideas}</span> : null;
+  const badge = (id:string) => id === 'review' && reviewQueue ? <span className="bd need">{reviewQueue}</span> : id === 'logs' && unresolved ? <span className="bd err">{unresolved}</span> : id === 'ideas' && ideas ? <span className="bd ai">{ideas}</span> : null;
   useEffect(() => { setMore(false); openPost(null); }, [pathname,openPost]);
   const switchTheme = () => { const root = document.documentElement; root.dataset.theme = getComputedStyle(root).colorScheme.includes('dark') ? 'light':'dark'; };
   const signOut = async () => {

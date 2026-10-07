@@ -54,3 +54,28 @@
 .schedule-modal .picker-popover,.drawer .picker-popover{position:static;width:100%;max-width:none;margin-top:6px;box-shadow:none;background:var(--sunk)}
 @media(max-width:700px){.publishing-bar{gap:14px;padding:14px}.account-fields{width:100%}.account-fields label{flex:1;min-width:140px}.publishing-bar>.btn{margin-left:0}.schedule-calendar .fc-toolbar-title{font-size:18px}.schedule-calendar .fc-daygrid-day-frame{min-height:95px}.schedule-fields{gap:8px}.editor-actions{grid-template-columns:1fr}.schedule-modal{padding:16px}.picker-popover{width:250px}}
 @media(max-width:480px){.schedule-fields{grid-template-columns:minmax(0,1fr)}.editor-format{grid-template-columns:minmax(0,1fr)}.schedule-modal .time-popover{width:100%}}
+.prev.processing,.post .media:has(.media-loading){aspect-ratio:auto;max-height:none;min-height:0;width:100%;margin:0}
+.media-loading{min-height:0;height:auto;display:grid;grid-template-columns:24px minmax(0,1fr);gap:3px 10px;text-align:left;padding:14px}
+.media-loading .generation-spinner{width:24px;height:24px;grid-row:1/3;align-self:center}.media-loading b{font-size:13px}.media-loading .small{grid-column:2;font-size:12px}
+.add-idea-modal form,.add-idea-modal label{display:grid;gap:8px}.add-idea-modal form{gap:16px}.add-idea-modal label{font-size:13px;font-weight:600}
+.schedule-media-preview{background:var(--sunk);border:1px solid var(--line);border-radius:10px;overflow:hidden;width:100%;max-width:400px;aspect-ratio:1;justify-self:center}
+.schedule-media-preview.format-video{aspect-ratio:9/16;max-width:220px}.schedule-media-preview .asset-preview{height:100%;width:100%}.schedule-media-preview .asset-preview img,.schedule-media-preview .asset-preview video{max-height:100%;width:100%;object-fit:contain}.schedule-media-preview.no-selection{min-height:240px;aspect-ratio:auto;align-self:stretch}.schedule-media-preview .empty{height:100%;min-height:240px;font-size:13px}
+.schedule-composer.side-preview{grid-template-columns:minmax(0,1fr) minmax(240px,.85fr);column-gap:28px;align-items:start}.side-preview>.sechead,.side-preview>p,.side-preview>form{grid-column:1}.side-preview>.schedule-media-preview{grid-column:2;grid-row:1/span 3}.side-preview>form{grid-row:3}
+.schedule-modal .schedule-media-preview{max-height:300px;width:min(100%,300px);max-width:100%;margin:auto}.schedule-modal .schedule-media-preview.format-video{max-height:280px;width:min(100%,158px)}
+@media(max-width:900px){.schedule-composer.side-preview{grid-template-columns:minmax(0,1fr)}.side-preview>.schedule-media-preview{grid-column:1;grid-row:auto;max-height:320px}.side-preview>form{grid-row:auto}.schedule-media-preview.no-selection{display:none}}
+
+/* Board fills the screen; each stage owns its vertical scroll area. */
+.shell:has(.board-workspace) .app{height:100dvh;min-height:0;overflow:hidden}
+.shell:has(.board-workspace) .main{height:100%;min-height:0}
+.shell:has(.board-workspace) .top{flex-shrink:0}
+.shell:has(.board-workspace) .page{flex:1;min-height:0;overflow:hidden;padding-block:20px 20px}
+.board-workspace{display:flex;flex-direction:column;flex:1;min-height:0;gap:16px;overflow:hidden}
+.board-workspace>.tools,.board-workspace>.kbtabs,.board-workspace>.notes{flex-shrink:0}
+.board-workspace .kb{flex:1;min-height:0;align-items:stretch;overflow-y:hidden}
+.board-workspace .kcol{height:100%;min-height:0;overflow:hidden}
+.board-workspace .khead{flex-shrink:0}
+.board-workspace .kbody{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin;scrollbar-color:var(--line) transparent;scrollbar-gutter:stable}
+.board-workspace .kc{flex-shrink:0}
+.board-workspace .kbody:focus-visible,.board-archive .rows:focus-visible{outline:2px solid var(--brand);outline-offset:-2px}
+.board-archive{flex:1;min-height:0;overflow:hidden}.board-archive>.sechead{flex-shrink:0}.board-archive>.rows{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain}.board-archive .rowi{flex-shrink:0}
+@container app (max-width:900px){.shell:has(.board-workspace) .page{padding-block:16px calc(76px + env(safe-area-inset-bottom,0px))}.board-workspace{gap:10px}.board-workspace .notes{display:none}.board-workspace .kbtabs{flex-wrap:nowrap}.board-workspace .kbtabs .fchip{flex-shrink:0}}

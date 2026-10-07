@@ -8,7 +8,7 @@ const words = ['No','One','Two','Three','Four','Five','Six','Seven','Eight','Nin
 const countWord = (count: number) => words[count] || String(count);
 export default function TodayPage() {
   const { state, openPost, command, pending } = useStudio();
-  const review = state.posts.filter(post=>post.stage==='review');
+  const review = state.posts.filter(post=>post.stage==='review' && post.approvedVersion !== post.version);
   const errors = state.posts.filter(post=>post.error);
   const today = state.posts.filter(post=>['scheduled','published'].includes(post.stage)&&post.day===0).sort(byTime);
   const ideas = state.posts.filter(post=>post.stage==='idea');

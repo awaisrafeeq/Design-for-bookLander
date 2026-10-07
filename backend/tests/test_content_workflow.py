@@ -1,6 +1,7 @@
 """Regression checks for content/media transitions; no provider calls or DB writes."""
 import json
 import unittest
+from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
@@ -26,6 +27,54 @@ def job(kind="write"):
 
 
 class ContentWorkflowTests(unittest.TestCase):
+    def test_approval_without_slot_keeps_post_in_review(self):
+        item, db = post("review", [{"id": "media"}]), MagicMock()
+        db.scalar.side_effect = [item, None]
+        with patch.object(studio, "require_permission"), patch.object(studio, "require_approver"), patch.object(studio, "save_checks", return_value={"passed":True}), patch.object(studio, "audit"):
+            studio.mutate_post(db, SimpleNamespace(id="admin",role="admin",name="Admin"), SimpleNamespace(headers={}), {"action":"approve","id":7,"version":2})
+        self.assertEqual(item.stage,"review")
+        self.assertEqual(item.approved_version,2)
+
+    def test_approved_schedule_save_moves_to_scheduled(self):
+        item, db = post("review", [{"id":"media"}]), MagicMock()
+        item.approved_version=2
+        db.scalar.side_effect=[item,SimpleNamespace(id="account")]
+        with patch.object(workflow,"require_permission"), patch.object(workflow,"effective_permissions",return_value={"publish.send":True}), patch.object(workflow,"parse_schedule",return_value=datetime.now(UTC)+timedelta(days=2)), patch.object(workflow,"schedule_job"):
+            workflow.schedule_command(db,SimpleNamespace(id="admin"),{"action":"save","id":7,"version":2,"scheduledAt":"future","platforms":["Instagram"]})
+        self.assertEqual(item.stage,"scheduled")
+        self.assertTrue(item.payload["scheduledAt"])
+
+    def test_cancel_schedule_returns_post_to_review(self):
+        item, db = post("scheduled", [{"id":"media"}]), MagicMock()
+        item.payload["scheduledAt"]=(datetime.now(UTC)+timedelta(days=1)).isoformat()
+        item.approved_version=2; db.scalar.return_value=item
+        with patch.object(workflow,"require_permission"):
+            workflow.schedule_command(db,SimpleNamespace(id="admin"),{"action":"cancel","id":7,"version":2})
+        self.assertEqual(item.stage,"review")
+        self.assertIsNone(item.payload["scheduledAt"])
+
+    def test_provider_cancel_completion_returns_post_to_review(self):
+        item, task, db=post("scheduled",[{"id":"media"}]),job("cancel"),MagicMock()
+        task.payload={"publicationId":"11111111-1111-4111-8111-111111111111"}
+        publication=SimpleNamespace(provider_id="remote",status="cancelling")
+        db.get.return_value=publication;db.scalar.return_value=None
+        with patch.object(jobs,"Zernio"):
+            jobs.execute_publish(db,task,item)
+        self.assertEqual(item.stage,"review")
+        self.assertEqual(publication.status,"cancelled")
+
+    def test_legacy_approved_post_without_slot_is_exposed_in_review(self):
+        item=post("scheduled",[{"id":"media"}]);item.approved_version=2
+        self.assertEqual(studio.post_dto(item)["stage"],"review")
+
+    def test_create_idea_saves_optional_input_in_database_payload(self):
+        db=MagicMock()
+        with patch.object(studio,"require_permission"),patch.object(studio,"audit"):
+            studio.mutate_post(db,SimpleNamespace(id=None,role="admin"),SimpleNamespace(headers={}),{"action":"create","title":"New topic","note":"Audience and angle"})
+        created=db.add.call_args.args[0]
+        self.assertEqual(created.payload["note"],"Audience and angle")
+        db.commit.assert_called_once()
+
     def test_caption_without_media_stays_selected_and_preserves_snapshot(self):
         item, task = post(), job()
         db = MagicMock()
