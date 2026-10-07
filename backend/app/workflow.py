@@ -6,7 +6,7 @@ from fastapi import HTTPException
 from sqlalchemy import select
 
 from app.config import settings
-from app.jobs import ACTIVE, brand_snapshot, queue, save_checks, schedule_job
+from app.jobs import ACTIVE, brand_snapshot, queue, save_checks, schedule_job, editable_stage
 from app.models import ProviderAccount, Publication, StudioPost, User, WorkJob
 from app.permissions import effective_permissions, require_permission
 from app.providers import ProviderError, Zernio
@@ -29,7 +29,7 @@ def generation_command(db, user, command):
     else:
         query = select(StudioPost).with_for_update()
         if action == "generate-all":
-            query = query.where(StudioPost.stage == "selected")
+            query = query.where(StudioPost.stage.in_({"selected", "review"}))
         else:
             try:
                 query = query.where(StudioPost.id == int(command.get("id")))
@@ -39,6 +39,10 @@ def generation_command(db, user, command):
         if not posts:
             raise HTTPException(404, "No picked posts found")
         for post in posts:
+            if post.stage == "review" and not post.payload.get("media"):
+                post.stage = "selected"
+            if action == "generate-all" and post.stage != "selected":
+                continue
             if db.scalar(select(WorkJob.id).where(WorkJob.post_id == post.id, WorkJob.status.in_(ACTIVE))):
                 raise HTTPException(409, "This post already has a background job running.")
             if command.get("version") is not None and command["version"] != post.version:
@@ -90,15 +94,24 @@ def generation_command(db, user, command):
                         "Do not imitate or invent an exact book cover. Use an uploaded approved cover only if one is provided.",
                     ))
                 queue(db, "media", provider, user.id, post.id,
-                      {"brief": brief, "brand": policy, **({"duration": duration, "voiceover": voiceover} if provider == "Creatify" else {})})
+                      {"brief": brief, "brand": policy, "previousStage": post.stage, **({"duration": duration, "voiceover": voiceover} if provider == "Creatify" else {})})
             else:
-                if post.stage not in ({"review"} if action == "revise" else {"selected"}):
+                if post.stage not in ({"review", "selected"} if action == "revise" else {"selected"}):
                     raise HTTPException(409, "Pick an idea before generation, or revise a post in Review.")
                 note = "\n".join(str(command.get(key) or "").strip() for key in ("reason", "note")).strip()[:1000]
-                queue(db, "revise" if action == "revise" else "write", "OpenRouter", user.id, post.id, {"note": note, "brand": policy})
+                draft = command.get("draft") or {}
+                if not isinstance(draft, dict):
+                    raise HTTPException(422, "Draft must contain content fields.")
+                allowed = {"caption": 5000, "tags": 500, "script": 5000, "mediaBrief": 5000, "videoDirection": 5000, "note": 1000}
+                if any(key not in allowed or not isinstance(value, str) or len(value) > allowed[key] for key, value in draft.items()):
+                    raise HTTPException(422, "Draft contains invalid or oversized fields.")
+                if draft:
+                    require_permission(user, "content.edit")
+                queue(db, "revise" if action == "revise" else "write", "OpenRouter", user.id, post.id,
+                      {"note": note, "brand": policy, "inputContent": draft, "previousStage": post.stage})
             post.approved_version = None
             post.stage = "revision" if action == "revise" else "generating"
-            post.payload = {**post.payload, "error": None}
+            post.payload = {**post.payload, "error": None, "generationKind": "media" if action == "generate-media" else "text"}
     db.commit()
     return {"message": "Queued. Progress and failures will appear in Board and Logs."}
 
@@ -176,6 +189,8 @@ def schedule_command(db, user, command):
         raise HTTPException(409, "This post changed. Refresh before scheduling.")
     if post.stage not in {"review", "scheduled"}:
         raise HTTPException(409, "Send the post to Review before choosing its schedule.")
+    if not post.payload.get("media"):
+        raise HTTPException(422, "Attach or generate media before scheduling.")
     targets = list(db.scalars(select(Publication).where(Publication.post_id == post.id, Publication.status != "cancelled").with_for_update()))
     active_jobs = list(db.scalars(select(WorkJob).where(WorkJob.post_id == post.id, WorkJob.status.in_(ACTIVE))))
     if any(job.status == "running" for job in active_jobs):
@@ -315,6 +330,6 @@ def retry_job(db, user, command):
     if post and job.kind in {"write", "revise", "media"}:
         post.stage = "generating"
         post.approved_version = None
-        post.payload = {**post.payload, "error": None}
+        post.payload = {**post.payload, "error": None, "generationKind": "media" if job.kind == "media" else "text"}
     db.commit()
     return {"message": "Retry queued"}

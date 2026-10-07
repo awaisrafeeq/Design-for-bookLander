@@ -3,21 +3,30 @@ import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { useStudio } from '../components/StudioProvider';
-import { Chip, Cover, Empty, FormatChip, Icon, Media, Who, money } from '../components/Design';
-import { dayLabel, getBook, revisionReasons } from '../domain';
+import { Cover, FormatChip, Icon, Media, Who } from '../components/Design';
+import { usePostVersion, VersionPicker } from '../components/PostVersions';
+import { ScheduleComposer } from '../components/Scheduling';
+import type { Post } from '../types';
+
+function ReviewWorkspace({ post, queue, select }: { post: Post; queue: Post[]; select: (id:number) => void }) {
+  const {state,command,pending,openPost} = useStudio();
+  const {shown,historical,selected,setSelected} = usePostVersion(post);
+  const approved = post.approvedVersion === post.version;
+  const processing = ['generating','revision'].includes(post.stage);
+  return <div className="rv"><div className="rq">{queue.map(item => <button key={item.id} className={`q ${item.id===post.id?'on':''}`} onClick={() => select(item.id)}><Cover bookId={item.bookId}/><span className="t"><b>{item.title}</b><small>{item.format} · {item.platform} · v{item.version}</small></span></button>)}</div><div className="stage"><div className="post"><div className="ph"><span className="av">BL</span>booklender<span className="muted">· {shown.platform}</span><Who kind={shown.human?'team':'ai'}/></div><div className={`media ${shown.format==='video'?'video':'sq'}`}><Media post={shown}/></div><div className="cp"><span>{shown.caption}</span><em>{shown.tags}</em></div></div></div><div className="decide"><h2>{shown.title}</h2><div className="tools"><FormatChip post={shown}/><span className={`chip ${approved?'green':''}`}>{approved?'Approved':'Awaiting approval'}</span></div><VersionPicker post={post} selected={selected} onChange={setSelected}/>
+    {!historical && <>{processing ? <p className="small muted" role="status">Generating a new version…</p> : <div className="review-actions">{!approved && <button className="btn ok lg" disabled={pending || !state.permissions?.['review.approve'] || post.brandChecks?.passed === false} onClick={() => void command('posts',{action:'approve',id:post.id,version:post.version})}><Icon name="check"/>Approve</button>}<button className="btn ghost" disabled={pending || !state.permissions?.['content.edit']} onClick={() => approved ? void command('posts',{action:'reopen',id:post.id,version:post.version}).then(ok => {if(ok)openPost(post.id);}) : openPost(post.id)}><Icon name="edit"/>Edit draft</button>{!approved && <button className="btn danger" disabled={pending || !state.permissions?.['review.approve']} onClick={() => void command('posts',{action:'reject',id:post.id,version:post.version})}><Icon name="x"/>Reject</button>}</div>}{post.error && <p className="small form-error" role="alert">{post.error}</p>}{!processing && state.modules?.includes('Schedule') && <ScheduleComposer key={post.id} post={post}/>}<div className="lockline"><Icon name="lock"/>Only an approved version can be published</div></>}
+  </div></div>;
+}
 
 export default function ReviewPage() {
-  const search=useSearchParams(); const {state,command,pending,openPost}=useStudio();
-  const [selectedId,setSelectedId]=useState<number|null>(null); const [revising,setRevising]=useState(false); const [reason,setReason]=useState(''); const [note,setNote]=useState('');
-  useEffect(()=>{const query=Number(search.get('post'));if(query)setSelectedId(query)},[search]);
-  const queue=state.posts.filter(post=>post.stage==='review'); const waiting=state.posts.filter(post=>post.stage==='revision');
-  if(!queue.length)return <div className="card empty"><span className="ring"><Icon name="check"/></span><h2>All caught up</h2><span>Nothing is waiting for approval.</span>{waiting.length>0 && <span className="small">{waiting.length} being remade by AI</span>}<Link className="btn" href="/ideas">Pick ideas</Link></div>;
-  const post=queue.find(item=>item.id===selectedId)||queue[0]; const book=getBook(state,post.bookId); const version=post.version||1;
-  const last=post.history?.at(-1);
-  const act=(action:string)=>{void command('posts',{action,id:post.id,version:post.version}).then(ok=>{if(ok)setRevising(false)})};
-  return <div className="rv"><div className="rq">{queue.map(item=><button key={item.id} className={`q ${item.id===post.id?'on':''}`} onClick={()=>{setSelectedId(item.id);setRevising(false)}}><Cover bookId={item.bookId}/><span className="t"><b>{item.title}</b><small>{item.format[0].toUpperCase()+item.format.slice(1)} · {item.platform}{(item.version||1)>1?` · v${item.version}`:''}</small></span></button>)}{waiting.map(item=><div className="q wait" key={item.id}><Cover bookId={item.bookId}/><span className="t"><b>{item.title}</b><small style={{color:'var(--ai)'}}>AI is making v{item.version}</small></span></div>)}</div>
-    <div className="stage"><div className="post"><div className="ph"><span className="av">BL</span>booklender<span className="muted" style={{fontWeight:500}}>· {post.platform}</span><Who kind={post.human ? 'team' : 'ai'}/></div><div className={`media ${post.format==='video'?'video':'sq'}`}><Media post={post}/></div><div className="cp"><span>{post.caption}</span><em>{post.tags}</em></div></div></div>
-    <div className="decide"><h2>{post.title}</h2><div style={{display:'flex',gap:6,flexWrap:'wrap'}}><FormatChip post={post}/><Chip><Icon name="clock"/>{post.scheduledAt ? `${dayLabel(post.day)} · ${post.time} ET` : 'Choose a time in Schedule'}</Chip></div><div className="verdots">{[1,2,3].map(index=><i key={index} className={index<=version?'f':''}/>)}<span style={{marginLeft:6}}>Version {version}</span>{post.cost!=null && <span className="cost">AI cost {money(post.cost)}</span>}</div>{last && <div className="hist"><b>You asked: {last.reason}</b>{last.note && <><br/>“{last.note}”</>}</div>}<div className="card pad checks"><div><span className="k w"><Icon name="alert"/></span>Check copy against brand voice</div><div><span className={`k ${post.warning?'w':''}`}><Icon name={post.warning?'alert':'check'}/></span>{post.warning || (post.brandChecks?.passed ? `Phrase checks passed - policy v${post.brandChecks.policyVersion}` : 'Save the draft to run brand checks')}</div><div><span className="k w"><Icon name="alert"/></span>Availability not verified</div></div>
-      {revising?<div className="card pad sec"><b>What should change?</b><div className="reasons">{revisionReasons.map(value=><button key={value} className={reason===value?'on':''} onClick={()=>setReason(value)}>{value}</button>)}</div><input placeholder="One line for the AI (optional)" aria-label="Note for the AI" value={note} onChange={event=>setNote(event.target.value)}/><div className="dact"><button className="btn ghost" onClick={()=>{setRevising(false);setReason('')}}>Back</button><button className="btn ai" disabled={!reason||pending} onClick={()=>void command('posts',{action:'revise',id:post.id,version:post.version,reason,note}).then(ok=>{if(ok){setRevising(false);setNote('');setReason('')}})}><Icon name="spark"/>Send to AI</button></div></div>:<><button className="btn ghost" disabled={pending || !state.permissions?.['content.edit']} onClick={()=>openPost(post.id)}>Edit draft</button><div className="acts3"><button className="btn ok lg" disabled={pending || !state.permissions?.['review.approve'] || post.brandChecks?.passed === false} onClick={()=>act('approve')}><Icon name="check"/>Approve</button><button className="btn ghost lg" disabled={pending || !state.permissions?.['content.generate']} onClick={()=>setRevising(true)}><Icon name="edit"/>Revise</button><button className="btn danger lg" disabled={pending || !state.permissions?.['review.approve']} onClick={()=>act('reject')}><Icon name="x"/>Reject</button></div></>}<div className="lockline"><Icon name="lock"/>Nothing goes live until you approve</div></div>
-  </div>;
+  const search = useSearchParams(); const {state} = useStudio();
+  const [selectedId,setSelectedId] = useState<number|null>(null);
+  useEffect(() => {const id=Number(search.get('post')); if(id)setSelectedId(id);},[search]);
+  const queue = state.posts.filter(post => post.stage==='review' && post.media?.length);
+  const focused = state.posts.find(post => post.id===selectedId && ['scheduled','generating','revision'].includes(post.stage) && post.media?.length);
+  const post = queue.find(item => item.id===selectedId) || focused || queue[0];
+  // Keep the newly approved post open so its slot can be set immediately.
+  useEffect(() => {if(post && selectedId===null)setSelectedId(post.id);},[post?.id,selectedId]);
+  if(!post) return <div className="card empty"><span className="ring"><Icon name="check"/></span><h2>All caught up</h2><span>Posts appear here once media is ready.</span><Link className="btn" href="/ideas">Pick ideas</Link></div>;
+  return <ReviewWorkspace key={post.id} post={post} queue={queue} select={setSelectedId}/>;
 }

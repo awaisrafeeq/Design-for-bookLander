@@ -17,6 +17,7 @@
 .logside .cn{border:0;border-radius:0;border-top:1px solid var(--line2);padding:11px 14px}
 .logside .cn:first-child{border-top:0}
 .feed{display:flex;flex-direction:column}
+.log-pagination{display:flex;justify-content:space-between;align-items:center;gap:12px;padding-top:14px;border-top:1px solid var(--line2)}.log-pagination>div{display:flex;align-items:center;gap:10px}
 .ev{display:grid;grid-template-columns:70px 32px minmax(0,1fr);gap:12px;padding:14px 0;border-top:1px solid var(--line2);align-items:start}
 .ev:first-child{border-top:0}
 .ev .tm{color:var(--mute);font-size:13px;font-weight:500;padding-top:6px;font-variant-numeric:tabular-nums}

@@ -1,13 +1,13 @@
 'use client';
 import { useState } from 'react';
 import { useStudio } from '../components/StudioProvider';
-import { Cover, DueChip, Icon, Meta, SourceChip, VersionChip, Who } from '../components/Design';
+import { Cover, DueChip, Icon, Meta, SourceChip, VersionChip, Who, Media } from '../components/Design';
 import { atRisk, dayLabel, formats, stages } from '../domain';
 import type { Post } from '../types';
 
 function KanbanCard({ post, onOpen }: { post: Post; onOpen: () => void }) {
   const status = ['generating','revision'].includes(post.stage) ? <><div className="prog"><i style={{width:`${post.progress || 20}%`}}/></div><span className="stat" style={{color:'var(--ai)'}}>{post.stage==='revision'?`Making v${post.version}`:`Making ${formats[post.format].label.toLowerCase()}`}</span></> : post.stage==='scheduled' ? post.error ? <span className="stat bad"><Icon name="alert"/>{post.error}</span> : <span className="stat"><Icon name="clock"/>{post.scheduledAt ? `${dayLabel(post.day)}, ${post.time}` : 'Approved - choose a time'}<span className="muted">by {post.approvedBy}</span></span> : null;
-  return <button className={`kc ${!post.human&&['idea','generating','revision'].includes(post.stage)?'ai':''} ${atRisk(post)?'risk':''} ${post.error?'fail':''}`} onClick={onOpen}><span className="hd"><Cover bookId={post.bookId}/><b>{post.title}</b></span><Meta post={post}/>{status}<span className="ft">{post.stage==='idea' && <SourceChip post={post}/>}<DueChip post={post}/><VersionChip post={post}/></span></button>;
+  return <div className={`kc ${!post.human&&['idea','generating','revision'].includes(post.stage)?'ai':''} ${atRisk(post)?'risk':''} ${post.error?'fail':''}`}>{(post.media?.length && post.stage === 'review' || ['generating','revision'].includes(post.stage)) ? <div className="kanban-media"><Media post={post}/></div> : null}<button className="kanban-open" onClick={onOpen}><span className="hd"><Cover bookId={post.bookId}/><b>{post.title}</b></span><Meta post={post}/>{status}<span className="ft">{post.stage==='idea' && <SourceChip post={post}/>}<DueChip post={post}/><VersionChip post={post}/></span></button></div>;
 }
 export default function BoardPage() {
   const { state, openPost, command, pending } = useStudio();

@@ -1,7 +1,7 @@
 /* today */
 .lede{display:flex;flex-direction:column;gap:8px;padding-bottom:22px;border-bottom:1px solid var(--line)}
 .lede .date{font-size:13px;font-weight:600;color:var(--mute)}
-.lede p{font-family:var(--serif);font-size:25px;line-height:1.38;font-weight:400;letter-spacing:-.01em;max-width:44ch;text-wrap:pretty}
+.lede p{font-family:var(--serif);font-size:25px;line-height:1.38;font-weight:400;letter-spacing:-.01em;max-width:none;width:100%;text-wrap:pretty;overflow-wrap:anywhere}
 .lede p .n-need{color:var(--need)}.lede p .n-err{color:var(--err)}
 .lede p :is(button,a){font:inherit;color:inherit;text-decoration:underline;text-decoration-thickness:1px;text-underline-offset:4px;text-decoration-color:var(--line)}
 .lede p :is(button,a):hover{text-decoration-color:currentColor}

@@ -4,10 +4,12 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { StudioProvider, useStudio } from './StudioProvider';
 import { Icon } from './Icon';
-import { Cover, DueChip, FormatChip, Media, Meter, PlatformChip, SourceChip, Who, money } from './Design';
-import { dayLabel, formats, getBook, used } from '../domain';
+import { DueChip, FormatChip, Media, Meter, PlatformChip, SourceChip, Who, money } from './Design';
+import { used } from '../domain';
 import type { Post } from '../types';
 import { ContentEditor } from './ContentEditor';
+import { ScheduleComposer } from './Scheduling';
+import { usePostVersion, VersionPicker } from './PostVersions';
 
 const groups: { title: string; links: [string,string,string,string][] }[] = [
   { title: 'Work', links: [['today','home','Today','/'],['board','board','Board','/board'],['ideas','bulb','Ideas','/ideas'],['review','eye','Review','/review'],['schedule','cal','Schedule','/schedule'],['results','chart','Results','/results']] },
@@ -16,21 +18,21 @@ const groups: { title: string; links: [string,string,string,string][] }[] = [
 ];
 
 function PostDrawer({ post }: { post: Post }) {
-  const { state, openPost, command, pending } = useStudio(); const book = getBook(state,post.bookId);
+  const { state, openPost, command, pending } = useStudio();
+  const { shown, historical, selected, setSelected } = usePostVersion(post);
   useEffect(() => { const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape') openPost(null); }; window.addEventListener('keydown', onKey); return () => window.removeEventListener('keydown', onKey); }, [openPost]);
-  const stage = post.stage === 'published' ? 'Published' : post.stage === 'archived' ? 'Archive' : post.stage[0].toUpperCase() + post.stage.slice(1);
-  const made = Boolean(post.media?.length) || ['review','scheduled','published'].includes(post.stage) || (post.stage === 'revision' && post.caption);
+  const stage = shown.stage === 'published' ? 'Published' : shown.stage === 'archived' ? 'Archive' : shown.stage[0].toUpperCase() + shown.stage.slice(1);
   const act = (action: string) => { void command('posts',{action,id:post.id,version:post.version}).then(ok=>{if(ok)openPost(null)}); };
   return <><div className="scrim" onClick={() => openPost(null)}/><aside className="drawer" role="dialog" aria-modal="true" aria-label={post.title}><div className="dh"><span className="chip">{stage}</span>{post.stage !== 'archived' && post.stage !== 'published' && <Who kind={post.stage === 'idea' || post.stage === 'revision' ? 'both' : post.stage === 'selected' || post.stage === 'review' ? 'team' : post.stage === 'scheduled' ? 'auto' : 'ai'}/>}<button className="iconbtn x" onClick={() => openPost(null)} aria-label="Close"><Icon name="x"/></button></div>
-    {made ? <div className={`prev ${post.format === 'video' ? 'video':'sq'}`}><Media post={post}/></div> : ['generating','revision'].includes(post.stage) ? <div className="prev none"><Who kind="ai"/><div style={{gridColumn:'1/-1',width:'100%'}}><div className="prog"><i style={{width:`${post.progress || 20}%`}}/></div></div></div> : <div className="prev none"><Cover bookId={post.bookId}/><span><b>Not made yet</b><br/><span className="small muted">Only picked ideas are made. The real cost shows once it is ready.</span></span></div>}
-    <h2>{post.title}</h2><div className="ft" style={{display:'flex',gap:6,flexWrap:'wrap'}}><SourceChip post={post}/><FormatChip post={post}/><PlatformChip post={post}/><DueChip post={post}/></div>
-    {post.reason && <div className="why"><Icon name={post.human ? 'user':'spark'}/><span><small>{post.human ? 'Added by a person' : 'Why AI suggested it'}</small>{post.reason}{post.event ? ` · ${post.event}`:''}</span></div>}
-    {post.error && <dl className="fixbox"><dt>Problem</dt><dd>{post.error}</dd><dt>Fix</dt><dd>Open Logs for the cause, recommended fix and retry options.</dd></dl>}
-    <div className="bookrow"><Cover bookId={post.bookId}/><span><b style={{display:'block'}}>{book.title}</b><span className="small muted">{book.author} · {book.format || ''}</span></span>{book.stock && <span className="chip green" style={{marginLeft:'auto'}}><Icon name="check"/>{book.stock} in stock</span>}</div>
-    <dl className="kv">{post.day != null && <><dt>Posts</dt><dd>{dayLabel(post.day)} · {post.time}</dd></>}{post.approvedBy && <><dt>Approved by</dt><dd>{post.approvedBy}</dd></>}<dt>{post.human ? 'Draft by' : 'Made with'}</dt><dd>{post.human ? 'BookLender team' : `${formats[post.format].tool}, OpenRouter`}</dd>{post.cost && <><dt>AI cost</dt><dd>{money(post.cost)}</dd></>}{post.reach && <><dt>Reach</dt><dd>{post.reach.toLocaleString()}</dd><dt>Engagement rate</dt><dd>{post.engagement}%</dd><dt>Link clicks</dt><dd>{post.clicks}</dd><dt>Saves</dt><dd>{post.saves}</dd></>}{post.archiveReason && <><dt>Why here</dt><dd>{post.archiveReason}</dd></>}</dl>
-    {post.history?.map(item=><div className="hist" key={item.version}><b>v{item.version} · {item.reason}</b>{item.note && <><br/>“{item.note}”</>}</div>)}
-    {['selected', 'review'].includes(post.stage) && <ContentEditor post={post}/>}
-    <div className="dact">{post.stage === 'idea' && <><button className="btn ghost" disabled={pending} onClick={()=>act('skip')}><Icon name="x"/>Skip</button><button className="btn" disabled={pending} onClick={()=>act('pick')}><Icon name="check"/>Pick</button></>}{post.stage === 'scheduled' && state.permissions?.['content.edit'] && <button className="btn ghost" disabled={pending} onClick={()=>act('reopen')}>Reopen for editing</button>}{post.stage === 'selected' && <><button className="btn ghost" disabled={pending} onClick={()=>act('unpick')}>Back to Ideas</button><button className="btn ai" disabled={pending || !state.permissions?.['content.generate']} onClick={()=>act('generate')}><Icon name="spark"/>Generate with AI</button></>}{post.stage === 'review' && <Link className="btn" href={`/review?post=${post.id}`} onClick={()=>openPost(null)}><Icon name="eye"/>Open in Review</Link>}{post.stage === 'scheduled' && post.error && <button className="btn" disabled={pending} onClick={()=>void command('sources',{action:'reconnect',key:post.platform==='Instagram'?'ig':'fb'}).then(()=>openPost(null))}><Icon name="plug"/>Reconnect {post.platform}</button>}{post.stage === 'archived' && <button className="btn ghost" disabled={pending} onClick={()=>act('restore')}><Icon name="retry"/>Reactivate</button>}</div>
+    {(shown.media?.length || ['generating','revision'].includes(shown.stage)) ? <div className={`prev ${shown.format === 'video' ? 'video':'sq'}`}><Media post={shown}/></div> : null}
+    <h2>{shown.title}</h2><div className="ft" style={{display:'flex',gap:6,flexWrap:'wrap'}}><SourceChip post={shown}/><FormatChip post={shown}/><PlatformChip post={shown}/><DueChip post={shown}/></div>
+    {shown.reason && <div className="why"><Icon name={shown.human ? 'user':'spark'}/><span><small>{shown.human ? 'Added by a person' : 'Why AI suggested it'}</small>{shown.reason}{shown.event ? ` · ${shown.event}`:''}</span></div>}
+    {shown.error && <dl className="fixbox"><dt>Problem</dt><dd>{shown.error}</dd><dt>Fix</dt><dd>Open Logs for the cause, recommended fix and retry options.</dd></dl>}
+    <VersionPicker post={post} selected={selected} onChange={setSelected}/>
+    {historical ? <ContentEditor key={`history-${shown.version}`} post={shown} readOnly/> : ['selected','review'].includes(post.stage) ? <ContentEditor key="current" post={post}/> : (post.caption || post.mediaBrief || post.script) ? <ContentEditor key="current-readonly" post={post} readOnly/> : post.note ? <div className="notepill"><Icon name="user"/><span>{post.note}</span></div> : null}
+    {!historical && ['review','scheduled'].includes(post.stage) && post.media?.length && state.modules?.includes('Schedule') && <ScheduleComposer post={post}/>}
+    {historical && shown.scheduledAt && <p className="small muted">Saved posting slot: {new Date(shown.scheduledAt).toLocaleString('en-US',{timeZone:'America/New_York'})} ET</p>}
+    {!historical && <div className="dact">{post.stage === 'idea' && <><button className="btn ghost" disabled={pending} onClick={()=>act('skip')}><Icon name="x"/>Skip</button><button className="btn" disabled={pending} onClick={()=>act('pick')}><Icon name="check"/>Pick</button></>}{post.stage === 'scheduled' && state.permissions?.['content.edit'] && <button className="btn ghost" disabled={pending} onClick={()=>act('reopen')}>Reopen for editing</button>}{post.stage === 'selected' && <button className="btn ghost" disabled={pending} onClick={()=>act('unpick')}>Back to Ideas</button>}{post.stage === 'review' && <Link className="btn" href={`/review?post=${post.id}`} onClick={()=>openPost(null)}><Icon name="eye"/>Open in Review</Link>}{post.stage === 'archived' && <button className="btn ghost" disabled={pending} onClick={()=>act('restore')}><Icon name="retry"/>Reactivate</button>}</div>}
   </aside></>;
 }
 

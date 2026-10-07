@@ -13,7 +13,7 @@ from app.auth import get_current_session, require_csrf
 from app.db import get_db
 from app.models import AuditEvent, AuthSession, BrandPolicyVersion, BrandRule, Invitation, SourceSetting, SpendEntry, SpendSettings, StudioPost, User
 from app.security import hash_password, hash_session_token
-from app.jobs import ACTIVE, job_dto, save_checks
+from app.jobs import ACTIVE, job_dto, save_checks, snapshot_post, editable_stage
 from app.models import WorkJob, Publication
 from app.permissions import PERMISSIONS, effective_permissions, require_permission
 from app.workflow import generation_command, connections_dto, release_approved, schedule_command, sync_accounts, accounts_dto
@@ -222,8 +222,10 @@ def post_dto(post: StudioPost) -> dict:
         local = datetime.fromisoformat(payload["scheduledAt"]).astimezone(ZoneInfo("America/New_York"))
         payload["day"] = (local.date() - datetime.now(ZoneInfo("America/New_York")).date()).days
         payload["time"] = local.strftime("%H:%M")
-    return {**payload, "id": post.id, "stage": post.stage, "version": post.version,
-            "history": [{"version": item.get("version"), "reason": item.get("reason", "Updated"), "note": item.get("note", "")}
+    stage = "selected" if post.stage == "review" and not payload.get("media") else post.stage
+    return {**payload, "id": post.id, "stage": stage, "version": post.version,
+            "history": [{"version": item.get("version"), "reason": item.get("reason", "Updated"), "note": item.get("note", ""),
+                         "stage": item.get("stage"), "at": item.get("at"), "payload": item.get("payload")}
                         for item in post.version_history], "approvedVersion": post.approved_version}
 
 
@@ -327,6 +329,8 @@ def mutate_post(db: Session, user: User, request: Request, command: dict) -> dic
     post = db.scalar(select(StudioPost).where(StudioPost.id == post_id).with_for_update())
     if post is None:
         raise HTTPException(status_code=404, detail="Post not found")
+    if post.stage == "review" and not post.payload.get("media"):
+        post.stage = "selected"
     if db.scalar(select(WorkJob.id).where(WorkJob.post_id == post.id, WorkJob.status.in_(ACTIVE))):
         raise HTTPException(409, "Wait for the current background job before changing this post.")
     if action == "update" and post.stage == "review" and user.role != "admin" and "Review" not in user.module_access:
@@ -357,10 +361,13 @@ def mutate_post(db: Session, user: User, request: Request, command: dict) -> dic
         targets = db.scalars(select(Publication).where(Publication.post_id == post.id, Publication.status != "cancelled")).all()
         for target in targets:
             target.status = "cancelled"
+        snapshot_post(post, "Format or platform changed")
         post.payload = {**post.payload, "format": command["format"], "platform": command["platform"], "scheduledAt": None,
                         "platforms": [command["platform"]], "media": [] if command["format"] != post.payload["format"] else post.payload.get("media", [])}
         post.version += 1
         post.approved_version = None
+        if post.stage != "idea":
+            post.stage = editable_stage(post)
         message = "Format and platform saved"
     elif action == "remove-media":
         if post.stage not in {"selected", "review"}:
@@ -369,10 +376,11 @@ def mutate_post(db: Session, user: User, request: Request, command: dict) -> dic
         kept = [item for item in media if item["id"] != command.get("assetId")]
         if len(kept) == len(media):
             raise HTTPException(404, "Attachment not found")
-        post.version_history = [*post.version_history, {"version": post.version, "payload": dict(post.payload), "reason": "Attachment removed"}]
+        snapshot_post(post, "Attachment removed")
         post.version += 1
         post.approved_version = None
         post.payload = {**post.payload, "media": kept}
+        post.stage = editable_stage(post)
         message = "Attachment removed"
     elif action == "pick":
         if post.stage != "idea":
@@ -409,12 +417,14 @@ def mutate_post(db: Session, user: User, request: Request, command: dict) -> dic
             raise HTTPException(status_code=422, detail="Type your input first")
         if len(note) > 1000:
             raise HTTPException(status_code=422, detail="Notes must be 1,000 characters or fewer")
-        post.payload = {**post.payload, "note": note}
+        snapshot_post(post, "Idea input edited")
+        post.version += 1
+        post.payload = {**post.payload, "note": note, "versionReason": "Idea input edited"}
         message = "Input saved"
     elif action == "update":
         if post.stage not in {"selected", "review"}:
             raise HTTPException(status_code=409, detail="Drafts can only be edited after picking an idea")
-        changed = {key: command[key].strip() for key in ("caption", "tags", "script", "mediaBrief", "videoDirection") if isinstance(command.get(key), str)}
+        changed = {key: command[key].strip() for key in ("caption", "tags", "script", "mediaBrief", "videoDirection", "note") if isinstance(command.get(key), str)}
         if not changed:
             raise HTTPException(status_code=422, detail="Add a caption or tags before saving")
         if "caption" in changed and (not changed["caption"] or len(changed["caption"]) > 5000):
@@ -423,19 +433,23 @@ def mutate_post(db: Session, user: User, request: Request, command: dict) -> dic
             raise HTTPException(status_code=422, detail="Hashtags must be 500 characters or fewer")
         if any(len(changed.get(key, "")) > 5000 for key in ("script", "mediaBrief", "videoDirection")):
             raise HTTPException(422, "Script and media directions must be 5,000 characters or fewer")
-        post.version_history = [*post.version_history, {"version": post.version, "payload": dict(post.payload), "reason": "Content edited", "at": datetime.now(UTC).isoformat()}]
+        if len(changed.get("note", "")) > 1000:
+            raise HTTPException(422, "Idea input must be 1,000 characters or fewer")
+        snapshot_post(post, "Content edited")
         post.version += 1
         post.approved_version = None
-        post.payload = {**post.payload, **changed}
-        post.stage = "review"
+        post.payload = {**post.payload, **changed, "versionReason": "Content edited"}
+        post.stage = editable_stage(post)
         save_checks(db, post)
-        message = "Draft saved and sent to Review"
+        message = "Draft saved to Review" if post.stage == "review" else "Draft saved. Add media to send it to Review."
     elif action == "approve":
         require_approver(user)
         if post.stage != "review":
             raise HTTPException(status_code=409, detail="Only a post in Review can be approved")
         if not str(post.payload.get("caption") or "").strip():
             raise HTTPException(status_code=422, detail="Add a caption before approval")
+        if not post.payload.get("media"):
+            raise HTTPException(422, "Attach or generate media before approval.")
         if not save_checks(db, post)["passed"]:
             db.commit()
             raise HTTPException(422, "Resolve the brand violations before approval.")
@@ -450,7 +464,7 @@ def mutate_post(db: Session, user: User, request: Request, command: dict) -> dic
     post.updated_by = user.id
     audit(db, user, request, f"post.{action}", "studio_post", str(post.id), {"stage": post.stage, "version": post.version})
     db.commit()
-    return {"message": message}
+    return {"message": message, "version": post.version}
 
 
 def audit(db: Session, user: User, request: Request, action: str, resource_type: str, resource_id: str, details: dict) -> None:

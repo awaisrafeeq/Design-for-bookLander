@@ -19,6 +19,8 @@ class ProviderError(Exception):
     def fix(self):
         if self.ambiguous:
             return "Check the provider dashboard before retrying: this request may already have been accepted."
+        if self.provider == "OpenRouter" and self.status in {400, 404, 422}:
+            return "Select a model/provider with strict JSON Schema support, such as openai/gpt-4.1-mini, then restart the worker and retry."
         return {401: "Check the server API credentials.", 403: "Check API entitlement and account permissions.",
                 429: "Provider rate limit reached. Wait before retrying.",
                 400: "Check the selected account, media requirements and provider credits.",
@@ -102,13 +104,32 @@ class Zernio:
         return self.request("POST", f"/posts/{post_id}/retry", json={})
 
 
-def text_completion(prompt: str, instruction: str):
+def parse_generated_json(content: str) -> dict:
+    """Accept a JSON object, including harmless Markdown/prose wrappers."""
+    decoder = json.JSONDecoder()
+    for start, character in enumerate(content):
+        if character != "{":
+            continue
+        try:
+            value, _ = decoder.raw_decode(content[start:])
+        except json.JSONDecodeError:
+            continue
+        if isinstance(value, dict):
+            return value
+    raise ValueError("The AI response did not contain a complete JSON object.")
+
+
+def text_completion(prompt: str, instruction: str, schema: dict | None = None):
     if not settings.openrouter_api_key or not settings.openrouter_model:
         raise ValueError("Set OPENROUTER_API_KEY and OPENROUTER_MODEL on the server first.")
     response = call("OpenRouter", "POST", "https://openrouter.ai/api/v1/chat/completions",
         headers={"Authorization": f"Bearer {settings.openrouter_api_key}"},
-        json={"model": settings.openrouter_model, "max_tokens": 1600,
-              "response_format": {"type": "json_object"},
+        json={"model": settings.openrouter_model, "max_tokens": 5000,
+              "provider": {"require_parameters": True},
+              "plugins": [{"id": "response-healing"}],
+              "response_format": {"type": "json_schema", "json_schema": {
+                  "name": "booklender_content", "strict": True, "schema": schema,
+              }} if schema else {"type": "json_object"},
               "messages": [{"role": "system", "content": instruction}, {"role": "user", "content": prompt}]})
     # OpenRouter can return a successful envelope with no message text. Return
     # the usage and request ID so the caller can record them before validation.
@@ -116,7 +137,10 @@ def text_completion(prompt: str, instruction: str):
     choice = choices[0] if isinstance(choices, list) and choices and isinstance(choices[0], dict) else {}
     message = choice.get("message") if isinstance(choice.get("message"), dict) else {}
     content = message.get("content")
-    return content if isinstance(content, str) else "", response.get("usage", {}), response.get("id")
+    if isinstance(content, list):
+        content = "".join(part.get("text", "") for part in content if isinstance(part, dict))
+    usage = {**(response.get("usage") or {}), "finish_reason": choice.get("finish_reason")}
+    return content if isinstance(content, str) else "", usage, response.get("id")
 
 
 def predis_create(brief: str, format_name: str):

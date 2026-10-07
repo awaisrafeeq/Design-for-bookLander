@@ -11,7 +11,7 @@ from sqlalchemy.dialects.postgresql import insert
 from app.auth import get_current_session, require_csrf
 from app.config import settings
 from app.db import get_db
-from app.jobs import ACTIVE, save_checks
+from app.jobs import ACTIVE, save_checks, snapshot_post
 from app.media import asset_dto, asset_from_file, root, verify_signature
 from app.models import AuditEvent, MediaAsset, StudioPost, WebhookInbox, WorkJob
 from app.permissions import require_permission
@@ -50,10 +50,11 @@ async def upload_media(request: Request, post_id: int = Form(...), version: int 
         media = post.payload.get("media", []) if post.payload["format"] == "carousel" else []
         if len(media) >= 10:
             raise HTTPException(422, "A carousel can have at most 10 attachments.")
-        post.version_history = [*post.version_history, {"version": post.version, "payload": dict(post.payload), "reason": "Media uploaded"}]
+        snapshot_post(post, "Media uploaded")
         post.version += 1
         post.approved_version = None
-        post.payload = {**post.payload, "media": [*media, asset_dto(asset)]}
+        post.payload = {**post.payload, "media": [*media, asset_dto(asset)], "versionReason": "Media uploaded"}
+        post.stage = "review"
         save_checks(db, post)
         db.add(AuditEvent(actor_user_id=user.id, action="media.uploaded", resource_type="media_asset", resource_id=str(asset.id)))
         db.commit()

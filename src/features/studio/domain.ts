@@ -17,7 +17,13 @@ export const sources = { calendar: { label: 'Calendar', icon: 'cal' }, news: { l
 export const owners = { ai: { label: 'AI', icon: 'spark' }, team: { label: 'Team', icon: 'user' }, both: { label: 'AI + Team', icon: 'spark' }, auto: { label: 'Automatic', icon: 'clock' } };
 export const modules = ['Board', 'Ideas', 'Review', 'Schedule', 'Results', 'Sources', 'Brand', 'AI spend', 'Team', 'Logs'];
 export const roles: Record<TeamMember['role'], string[]> = { 'Super admin': modules, 'Campaigns manager': ['Board', 'Ideas', 'Review', 'Schedule', 'Results', 'Sources', 'Brand', 'AI spend', 'Logs'], Approver: ['Board', 'Ideas', 'Review', 'Schedule', 'Results', 'Logs'], Editor: ['Board', 'Ideas', 'Schedule', 'Sources', 'Brand', 'Logs'], Viewer: ['Board', 'Schedule', 'Results'] };
-export const revisionReasons = ['The copy', 'The look', 'Wrong title', 'Off brand', 'Something else'];
+export const revisionReasons = [
+  'Improve the caption or voiceover',
+  'Change the image or video visuals',
+  'Correct the book or topic details',
+  'Match the BookLender brand voice',
+  'Make another change',
+];
 export const fallbackBook: Book = { id: 'team', title: 'Team topic', author: 'BookLender', colors: ['#44546A', '#F2F2F2', '#F2C14E'] };
 export const getBook = (state: StudioState, id: string | null) => state.books[id || ''] || fallbackBook;
 export const money = (n: number) => '$' + n.toFixed(2);

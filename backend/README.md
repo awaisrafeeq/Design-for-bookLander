@@ -39,7 +39,7 @@ Edit the private server file; do not commit or send keys in chat.
 
 | Capability | Environment fields |
 | --- | --- |
-| Text and ideas | `OPENROUTER_API_KEY`, `OPENROUTER_MODEL` (explicit supported model ID) |
+| Text and ideas | `OPENROUTER_API_KEY`, `OPENROUTER_MODEL` (recommended: `openai/gpt-4.1-mini`, with strict JSON Schema support) |
 | Publishing | `ZERNIO_API_KEY`; optional `ZERNIO_PROFILE_ID` to limit account discovery |
 | Image/carousel | `PREDIS_API_KEY`, `PREDIS_BRAND_ID` |
 | Directed video | `CREATIFY_API_ID`, `CREATIFY_API_KEY`, `CREATIFY_TTS_ACCENT` (choose an accent ID from `GET /api/voices/`; no avatar ID required) |
@@ -60,7 +60,7 @@ Paid jobs run only after a deliberate command by an authorized user. An ambiguou
 
 ## Deploy
 
-GitHub `production` environment secrets: `HOSTINGER_HOST`, `HOSTINGER_USER`, `HOSTINGER_SSH_PRIVATE_KEY`, `HOSTINGER_KNOWN_HOSTS`. Push reviewed code, then manually run **Actions → Deploy BookLender to Hostinger → Run workflow**. The workflow preserves the server `.env`, builds on Hostinger and runs Alembic migration `0006_integrations` plus idempotent client-user provisioning. An ordinary push does not deploy.
+GitHub `production` environment secrets: `HOSTINGER_HOST`, `HOSTINGER_USER`, `HOSTINGER_SSH_PRIVATE_KEY`, `HOSTINGER_KNOWN_HOSTS`. A push to `main` runs **Deploy BookLender to Hostinger**; it can also be started manually from Actions. The workflow preserves the server `.env`, builds on Hostinger and runs migrations plus idempotent client-user provisioning.
 
 On the VPS, after changing environment values:
 
@@ -73,3 +73,13 @@ docker compose --env-file backend/.env -f backend/compose.yaml up -d --no-deps -
 Media is stored in the persistent `backend_media_data` volume shared by API and worker. Back up this volume with PostgreSQL before deploying further schema changes; deleting it breaks existing post attachments. Signing links are temporary, private previews require login, and no provider key is passed to Next.js.
 
 The API process provides `/health/live` and `/health/ready`; public routing exposes only Next.js plus signed media and the verified webhook. Provider failure details are sanitized. The first-admin bootstrap is for an empty database only and must not be repeated on the current installation.
+
+## Content and scheduling workflow
+
+Caption generation or manual text edits leave a post in Selected until media is attached. Successful image/carousel/video generation or a media upload moves it to Review. Removing its last attachment returns it to Selected. Existing text-only Review posts are exposed as Selected for compatibility. Approval and scheduling require media.
+
+New angle updates the existing idea and preserves a snapshot. The editor sends current content and optional instructions for AI regeneration. Current versions are editable; historical payloads are read-only. Older history entries that never stored a payload are marked unavailable rather than displaying the current draft as an old version.
+
+Board and Review use the same Eastern scheduling form as Schedule. A calendar date opens a scheduling dialog. Slots reserved before approval remain held. Publishing still requires approval of the exact current version and publishing permission.
+
+OpenRouter requests use strict JSON Schema, provider parameter requirements, response healing, and a 5,000-token output allowance. Harmless Markdown wrappers are accepted; incomplete or incorrectly typed content is rejected. Usage is recorded before parsing, including failed charged responses. There is no automatic paid model change. For reliable, inexpensive structured content, set `OPENROUTER_MODEL=openai/gpt-4.1-mini` on the server and recreate API/worker after changing the environment.

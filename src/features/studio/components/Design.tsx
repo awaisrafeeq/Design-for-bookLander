@@ -31,6 +31,7 @@ function NestedCover({ bookId, x, y, width, rotate = 0 }: { bookId: string | nul
 }
 export function Media({ post }: { post: Post }) {
   const { state } = useStudio(); const book = getBook(state,post.bookId); const [bg,fg,accent]=book.colors;
+  if (['generating','revision'].includes(post.stage)) return <div className="media-loading" role="status"><span className="generation-spinner"/><b>Generating{post.generationKind === 'media' ? ' media' : ' content'}…</b><span className="small muted">Your new version will appear here when ready.</span></div>;
   if (post.media?.length) return <div className={`asset-preview ${post.format === 'carousel' ? 'carousel-assets' : ''}`}>{post.media.map(asset => asset.type === 'video'
     ? <video key={asset.id} controls playsInline preload="metadata" src={asset.url} aria-label={`${post.title} video`}/>
     : <img key={asset.id} src={asset.url} alt={post.title}/>)}</div>;
