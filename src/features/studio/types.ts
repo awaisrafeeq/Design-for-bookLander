@@ -1,6 +1,7 @@
 export type Stage = 'idea' | 'selected' | 'generating' | 'review' | 'revision' | 'scheduled' | 'published' | 'archived';
 export type Format = 'video' | 'carousel' | 'image';
-export type Platform = 'Instagram' | 'Facebook';
+export type Platform = 'Instagram' | 'Facebook' | 'LinkedIn' | 'Pinterest' | 'X' | 'YouTube' | 'TikTok';
+export type PublishingPlatform = Platform;
 export type Source = 'calendar' | 'news' | 'team';
 
 export interface Post {
@@ -45,7 +46,8 @@ export interface Post {
   history?: { version: number; reason: string; note: string; stage?: Stage; at?: string; payload?: Partial<Post> }[];
   approvedVersion?: number;
   media?: { id: string; type: 'image' | 'video'; url: string; mime: string; size: number }[];
-  platforms?: Platform[];
+  platforms?: PublishingPlatform[];
+  platformSettings?: Record<string, Record<string, string | boolean>>;
   brandChecks?: { policyVersion: number; passed: boolean; violations: { rule: string; match: string }[]; warnings: string[] };
   publicationStatus?: string;
   publicationTargets?: { id: string; platform: string; status: string; postUrl?: string; error?: string }[];

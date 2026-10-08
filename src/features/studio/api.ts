@@ -33,4 +33,12 @@ export const studioApi = {
     if (!response.ok) throw new Error(result.error || 'Could not load the calendar');
     return result;
   },
+  async accountOptions<T>(accountId: string, detail: 'pinterest-boards' | 'tiktok-creator-info', mediaType?: 'video' | 'photo'): Promise<T> {
+    const query = new URLSearchParams({ accountId, detail });
+    if (mediaType) query.set('mediaType', mediaType);
+    const response = await fetch(`${base}/sources?${query}`, { cache: 'no-store' });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || `Could not load ${detail}`);
+    return result as T;
+  },
 };

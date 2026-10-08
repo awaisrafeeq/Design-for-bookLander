@@ -11,12 +11,14 @@ from sqlalchemy.orm import Session
 
 from app.auth import get_current_session, require_csrf
 from app.db import get_db
-from app.models import AuditEvent, AuthSession, BrandPolicyVersion, BrandRule, Invitation, SourceSetting, SpendEntry, SpendSettings, StudioPost, User
+from app.models import AuditEvent, AuthSession, BrandPolicyVersion, BrandRule, Invitation, ProviderAccount, SourceSetting, SpendEntry, SpendSettings, StudioPost, User
 from app.security import hash_password, hash_session_token
 from app.jobs import ACTIVE, job_dto, save_checks, snapshot_post, editable_stage, workflow_stage
 from app.models import WorkJob, Publication
 from app.permissions import PERMISSIONS, effective_permissions, require_permission
 from app.workflow import generation_command, connections_dto, schedule_command, sync_accounts, accounts_dto
+from app.providers import Zernio
+from app.publishing import PLATFORMS
 
 router = APIRouter(prefix="/studio", tags=["studio settings"])
 
@@ -276,7 +278,7 @@ def mutate_sources(db: Session, user: User, request: Request, command: dict) -> 
         sync_accounts(db)
         audit(db, user, request, "provider.accounts_synced", "zernio", "accounts", {})
         db.commit()
-        return {"message": "Accounts synced. Select the exact Facebook and Instagram accounts to use."}
+        return {"message": "Zernio connections synced. Select the accounts to use for publishing on Schedule."}
     if command.get("action") == "select-account":
         from app.models import ProviderAccount
         target = db.get(ProviderAccount, str(command.get("id")))
@@ -370,14 +372,19 @@ def mutate_post(db: Session, user: User, request: Request, command: dict) -> dic
     elif action == "configure":
         if post.stage not in {"idea", "selected", "review"}:
             raise HTTPException(409, "Format and platform can be changed before approval only.")
-        if command.get("format") not in {"image", "carousel", "video"} or command.get("platform") not in {"Facebook", "Instagram"}:
+        if command.get("format") not in {"image", "carousel", "video"} or command.get("platform") not in PLATFORMS:
             raise HTTPException(422, "Choose a valid format and platform.")
+        if command["platform"] == "YouTube" and command["format"] != "video":
+            raise HTTPException(422, "YouTube requires a video post.")
+        if command["platform"] == "Pinterest" and command["format"] == "carousel":
+            raise HTTPException(422, "Pinterest accepts one image or video per pin.")
         targets = db.scalars(select(Publication).where(Publication.post_id == post.id, Publication.status != "cancelled")).all()
         for target in targets:
             target.status = "cancelled"
         snapshot_post(post, "Format or platform changed")
         post.payload = {**post.payload, "format": command["format"], "platform": command["platform"], "scheduledAt": None,
-                        "platforms": [command["platform"]], "media": [] if command["format"] != post.payload["format"] else post.payload.get("media", [])}
+                        "platforms": [command["platform"]], "platformSettings": {},
+                        "media": [] if command["format"] != post.payload["format"] else post.payload.get("media", [])}
         post.version += 1
         post.approved_version = None
         if post.stage != "idea":
@@ -612,6 +619,21 @@ def get_setting_resource(
     if resource == "posts":
         return read_posts(db)
     if resource == "sources":
+        detail = request.query_params.get("detail")
+        if detail:
+            if user.role != "admin" and "Schedule" not in user.module_access:
+                raise HTTPException(403, "Schedule access required")
+            account = db.get(ProviderAccount, request.query_params.get("accountId", ""))
+            if not account or not account.active:
+                raise HTTPException(404, "Connected account not found")
+            if detail == "pinterest-boards" and account.platform == "pinterest":
+                return {"boards": Zernio().pinterest_boards(account.id)}
+            if detail == "tiktok-creator-info" and account.platform == "tiktok":
+                media_type = request.query_params.get("mediaType")
+                if media_type not in {"video", "photo"}:
+                    raise HTTPException(422, "Choose video or photo media")
+                return Zernio().tiktok_creator_info(account.id, media_type)
+            raise HTTPException(422, "This option is unavailable for the selected account")
         return read_sources(db)
     if resource == "logs":
         require_permission(user, "logs.view")

@@ -1,3 +1,5 @@
+import logging
+
 from celery import Celery
 
 from app.config import settings
@@ -12,7 +14,10 @@ celery_app.conf.update(
     task_acks_late=True,
     task_reject_on_worker_lost=True,
     worker_prefetch_multiplier=1,
-    beat_schedule={"studio-outbox": {"task": "booklender.process_jobs", "schedule": 15.0}},
+    beat_schedule={
+        "studio-outbox": {"task": "booklender.process_jobs", "schedule": 15.0},
+        "zernio-accounts": {"task": "booklender.sync_zernio_accounts", "schedule": 300.0},
+    },
 )
 
 
@@ -25,3 +30,17 @@ def healthcheck() -> str:
 def process_jobs():
     from app.jobs import run_pending
     run_pending()
+
+
+@celery_app.task(name="booklender.sync_zernio_accounts")
+def sync_zernio_accounts():
+    if not settings.zernio_api_key:
+        return
+    from app.db import SessionLocal
+    from app.workflow import sync_accounts
+
+    try:
+        with SessionLocal() as db:
+            sync_accounts(db)
+    except Exception:
+        logging.getLogger(__name__).exception("Zernio account sync failed; existing connections retained")

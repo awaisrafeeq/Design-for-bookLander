@@ -8,7 +8,7 @@ import { DueChip, FormatChip, Media, Meter, PlatformChip, SourceChip, Who, money
 import { used } from '../domain';
 import type { Post } from '../types';
 import { ContentEditor } from './ContentEditor';
-import { ScheduleComposer } from './Scheduling';
+import { ScheduleComposer } from './PublishingComposer';
 import { usePostVersion, VersionPicker } from './PostVersions';
 
 const groups: { title: string; links: [string,string,string,string][] }[] = [

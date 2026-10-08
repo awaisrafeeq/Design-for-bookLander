@@ -51,10 +51,14 @@ A domain purchase does not create an email mailbox. Create a sender such as `nor
 
 After configuration and deployment:
 
-1. Open Schedule as Super admin → **Sync accounts** → explicitly choose the FB and IG accounts. Test accounts are not automatically selected for BookLender.
+1. Open Schedule as Super admin → **Sync accounts** → explicitly choose the connected accounts to publish through. Active Zernio connections for the configured profile appear in BookLender after the next five-minute sync, or immediately after pressing Sync accounts. BookLender scheduling supports Instagram, Facebook, LinkedIn, Pinterest, X, YouTube, and TikTok. Unknown connectors are shown for reference. Test accounts are not automatically selected for BookLender.
 2. Configure Zernio's webhook URL as `https://booklender.tech/api/v1/webhooks/zernio`, subscribe to the relevant post lifecycle events and use its signing secret in the server environment. Polling also reconciles post status.
 3. Use Team's **Resend invite** for pending client users. No default passwords are assigned. BookLender admin is Super admin; Krishna is the initial approver with Content/Campaigns titles; Ronnie has no action rights until Super admin grants them. Existing account passwords are preserved.
-4. Add a manual topic → suggest ideas → pick one → write/generate/upload → review → approve → choose a future schedule. Choosing a slot before approval holds it locally.
+4. Add a manual topic → suggest ideas → pick one → write/generate/upload → review → approve → save a future schedule. Approval is required before scheduling.
+
+To switch Zernio accounts, update `ZERNIO_API_KEY` and the intended `ZERNIO_PROFILE_ID` in the server environment, then recreate the API, worker, and scheduler containers. The webhook URL remains the same; update `ZERNIO_WEBHOOK_SECRET` only if the new Zernio account uses a different signing secret. Sync accounts on Schedule to see the new connections immediately. Existing schedules are tied to their original Zernio account IDs and are not migrated to the new account.
+
+Scheduling checks each target before sending it: X allows up to 280 characters including hashtags; Pinterest needs a single image or video and a selected board; YouTube needs one video and a title of at most 100 characters; TikTok needs a video or photo set, an allowed creator privacy level, and explicit preview/consent confirmation. LinkedIn accepts this workflow's image, carousel, or video posts. Zernio may still reject media that fails a platform's own format, size, duration, account permission, or rate limits; inspect the provider error in Logs.
 
 Paid jobs run only after a deliberate command by an authorized user. An ambiguous provider timeout is shown for manual inspection before retrying. Zernio create requests use stable idempotency keys, and stale approvals cannot be sent. Zernio's immediate retry endpoint is deliberately not used: scheduling retries require a future time.
 

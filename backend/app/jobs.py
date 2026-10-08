@@ -122,6 +122,12 @@ def execute_text(db, job, post):
             'Do not put dialogue or text overlays in `videoDirection`; it will guide Creatify Boreal visuals. '
             'For the voiceover, aim for 25 to 40 spoken words so it fits a short social video. '
             'No inventory claims.')
+        if post.payload.get("platform") == "X":
+            instruction += " This post's primary platform is X: keep caption and hashtags together under 280 characters."
+        elif post.payload.get("platform") == "Pinterest":
+            instruction += " This post's primary platform is Pinterest: keep caption and hashtags together under 800 characters."
+        elif post.payload.get("platform") == "TikTok":
+            instruction += " This post's primary platform is TikTok: keep caption and hashtags together under 2,200 characters."
         draft = {**post.payload, **job.payload.get("inputContent", {})}
         context_keys = ("title", "note", "caption", "tags", "script", "mediaBrief", "videoDirection", "format", "platform", "source", "reason")
         prompt = json.dumps({
@@ -184,7 +190,7 @@ def execute_text(db, job, post):
             post.version += 1
             post.payload = {**post.payload, "title": title, "reason": str(match.get("reason", "New angle"))[:1000],
                             "format": match.get("format") if match.get("format") in {"image", "carousel", "video"} else post.payload["format"],
-                            "platform": match.get("platform") if match.get("platform") in {"Instagram", "Facebook"} else post.payload["platform"],
+                            "platform": post.payload["platform"],
                             "error": None, "versionReason": "New idea angle"}
             post.stage = "idea"
             job.status = "completed"
@@ -351,7 +357,7 @@ def execute_publish(db, job, post):
         if publication.scheduled_at <= datetime.now(UTC) + timedelta(minutes=1):
             raise ValueError("This time has passed. Choose a future time; the app will not publish it immediately.")
         account = db.get(ProviderAccount, publication.account_id)
-        if not account or not account.active:
+        if not account or not account.active or account.platform != publication.platform:
             raise ValueError("The selected account is disconnected. Sync or reconnect it in Zernio.")
         assets = []
         for entry in post.payload.get("media", []):
@@ -361,9 +367,51 @@ def execute_publish(db, job, post):
             assets.append({"type": asset.kind, "url": public_url(asset, publication.scheduled_at)})
         if publication.platform == "instagram" and not assets:
             raise ValueError("Instagram requires an image or video. Attach media first.")
-        body = {"content": f"{post.payload['caption']}\n\n{post.payload.get('tags', '')}".strip(),
+        content = f"{post.payload['caption']}\n\n{post.payload.get('tags', '')}".strip()
+        options = post.payload.get("platformSettings") or {}
+        target = {"platform": publication.platform, "accountId": publication.account_id}
+        if publication.platform == "pinterest":
+            board_id = str((options.get("Pinterest") or {}).get("boardId") or "")
+            boards = Zernio().pinterest_boards(account.id)
+            if not board_id or not any(str(board.get("id")) == board_id for board in boards):
+                raise ValueError("The Pinterest board is unavailable. Choose an active board and save the schedule again.")
+            target["platformSpecificData"] = {"boardId": board_id, "title": post.payload["title"][:100]}
+        elif publication.platform == "youtube":
+            target["platformSpecificData"] = {"title": (options.get("YouTube") or {}).get("title") or post.payload["title"],
+                "visibility": (options.get("YouTube") or {}).get("visibility", "public"),
+                "madeForKids": (options.get("YouTube") or {}).get("madeForKids", False),
+                "containsSyntheticMedia": (options.get("YouTube") or {}).get("containsSyntheticMedia", False)}
+        elif publication.platform == "tiktok":
+            chosen = options.get("TikTok") or {}
+            media_type = "video" if assets[0]["type"] == "video" else "photo"
+            creator = Zernio().tiktok_creator_info(account.id, media_type)
+            permitted = {item.get("value") for item in creator.get("privacyLevels", [])}
+            if chosen.get("privacyLevel") not in permitted:
+                raise ValueError("TikTok privacy is no longer available for this creator. Refresh creator options and save again.")
+            if not chosen.get("consent"):
+                raise ValueError("TikTok preview confirmation and posting consent are required.")
+            commercial_types = {item.get("value") for item in creator.get("commercialContentTypes", [])}
+            commercial_type = chosen.get("commercialContentType", "none")
+            if commercial_types and commercial_type not in commercial_types:
+                raise ValueError("TikTok commercial disclosure is no longer available for this creator. Refresh creator options and save again.")
+            if commercial_type == "brand_content" and chosen["privacyLevel"] == "SELF_ONLY":
+                raise ValueError("TikTok paid partnership posts cannot use private visibility.")
+            interactions = (creator.get("postingLimits") or {}).get("interactionSettings") or {}
+            def interaction_allowed(key):
+                return (interactions.get(key) or {}).get("enabled") is not False
+            settings = {"privacy_level": chosen["privacyLevel"], "allow_comment": bool(chosen.get("allowComment")) and interaction_allowed("allow_comment"),
+                "content_preview_confirmed": True, "express_consent_given": True,
+                "commercialContentType": commercial_type}
+            if media_type == "video":
+                settings.update({"allow_duet": bool(chosen.get("allowDuet")) and interaction_allowed("allow_duet"),
+                                 "allow_stitch": bool(chosen.get("allowStitch")) and interaction_allowed("allow_stitch")})
+            else:
+                settings.update({"media_type": "photo", "description": content[:4000]})
+                content = post.payload["title"][:90]
+            target["platformSpecificData"] = {"tiktokSettings": settings}
+        body = {"content": content,
                 "scheduledFor": publication.scheduled_at.isoformat(), "timezone": "UTC",
-                "platforms": [{"platform": publication.platform, "accountId": publication.account_id}],
+                "platforms": [target],
                 "mediaItems": assets}
         response = Zernio().reschedule(publication.provider_id, {**body, "isDraft": False}) if job.kind == "reschedule" else Zernio().schedule(body, str(publication.id))
         remote = response.get("post", {})

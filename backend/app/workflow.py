@@ -10,6 +10,7 @@ from app.jobs import ACTIVE, brand_snapshot, queue, save_checks, schedule_job, e
 from app.models import ProviderAccount, Publication, StudioPost, User, WorkJob
 from app.permissions import effective_permissions, require_permission
 from app.providers import ProviderError, Zernio
+from app.publishing import PLATFORMS, validate_targets
 
 
 def generation_command(db, user, command):
@@ -127,27 +128,39 @@ def sync_accounts(db):
     for account in accounts.values():
         account.active = False
     for entry in remote:
-        platform = entry.get("platform")
-        if platform not in {"facebook", "instagram"}:
+        platform = str(entry.get("platform") or "").strip().lower()
+        identifier = str(entry.get("_id") or entry.get("id") or "").strip()
+        if not platform or not identifier or len(platform) > 40 or len(identifier) > 80:
             continue
-        identifier = str(entry["_id"])
         account = accounts.get(identifier)
         if not account:
             account = ProviderAccount(id=identifier, platform=platform, selected=False)
             db.add(account)
+        account.platform = platform
         account.name = str(entry.get("displayName") or entry.get("username") or platform)[:180]
         account.active = entry.get("isActive") is True
         account.synced_at = datetime.now(UTC)
+    for account in accounts.values():
+        if not account.active:
+            account.selected = False
     db.commit()
 
 
 def connections_dto(db):
     accounts = list(db.scalars(select(ProviderAccount)))
     result = []
-    for platform, identifier in (("instagram", "ig"), ("facebook", "fb")):
-        account = next((a for a in accounts if a.platform == platform and a.selected), None)
-        result.append({"id": identifier, "name": platform.title(), "purpose": "Publishing",
-                       "connected": bool(account and account.active), "detail": account.name if account else "Sync accounts, then select the correct publishing account."})
+    active = sorted((account for account in accounts if account.active), key=lambda account: (account.platform, account.name))
+    for account in active:
+        supported = account.platform in set(PLATFORMS.values())
+        label = "X" if account.platform == "twitter" else account.platform.title()
+        result.append({"id": account.id, "name": f"{label} · {account.name}", "purpose": "Publishing",
+                       "connected": True, "detail": "Selected for BookLender posting" if supported and account.selected
+                       else "Connected in Zernio · Select an account on Schedule" if supported
+                       else "Connected in Zernio · Posting is not configured for this platform"})
+    for platform in ("instagram", "facebook"):
+        if not any(account.platform == platform for account in active):
+            result.append({"id": platform, "name": platform.title(), "purpose": "Publishing",
+                           "connected": False, "detail": "No active account found. Sync accounts after connecting it in Zernio."})
     for identifier, name, configured in (("openrouter", "OpenRouter", settings.openrouter_api_key and settings.openrouter_model),
                                        ("predis", "Predis", settings.predis_api_key and settings.predis_brand_id),
                                        ("creatify", "Creatify", settings.creatify_api_key and settings.creatify_api_id and settings.creatify_tts_accent)):
@@ -245,18 +258,15 @@ def schedule_command(db, user, command):
     else:
         scheduled_at = parse_schedule(str(command.get("scheduledAt", "")))
         platforms = command.get("platforms") or [post.payload["platform"]]
-        if not isinstance(platforms, list) or not platforms or any(p not in {"Facebook", "Instagram"} for p in platforms):
-            raise HTTPException(422, "Select Facebook and/or Instagram.")
-        if post.approved_version == post.version and set(platforms) != set(post.payload.get("approvedPlatforms", [post.payload["platform"]])):
-            if any(t.provider_id for t in targets):
-                raise HTTPException(409, "Cancel the existing provider schedule before changing its approved platforms.")
-            post.approved_version = None
-            post.stage = "review"
+        options = command.get("platformSettings") or {}
+        validate_targets(post, platforms, options)
         if any(target.status == "cancelling" for target in targets):
             raise HTTPException(409, "Wait for Zernio to confirm cancellation before scheduling again.")
         if targets and any(t.provider_id for t in targets):
-            if {t.platform for t in targets} != {p.lower() for p in platforms}:
+            if {t.platform for t in targets} != {PLATFORMS[p] for p in platforms}:
                 raise HTTPException(409, "Cancel the existing schedule before changing its platforms.")
+            if options != (post.payload.get("platformSettings") or {}):
+                raise HTTPException(409, "Cancel the existing schedule before changing its platform options.")
             require_permission(user, "publish.send")
             for target in targets:
                 if target.status == "published":
@@ -277,17 +287,17 @@ def schedule_command(db, user, command):
             for target in targets:
                 target.status = "cancelled"
             for name in set(platforms):
-                account = db.scalar(select(ProviderAccount).where(ProviderAccount.platform == name.lower(), ProviderAccount.selected.is_(True), ProviderAccount.active.is_(True)))
+                account = db.scalar(select(ProviderAccount).where(ProviderAccount.platform == PLATFORMS[name], ProviderAccount.selected.is_(True), ProviderAccount.active.is_(True)))
                 if not account:
                     raise HTTPException(422, f"Sync and select the {name} account first.")
-                target = Publication(post_id=post.id, version=post.version, platform=name.lower(), account_id=account.id,
+                target = Publication(post_id=post.id, version=post.version, platform=PLATFORMS[name], account_id=account.id,
                                      scheduled_at=scheduled_at, status="held")
                 db.add(target)
                 db.flush()
                 if post.approved_version == post.version and effective_permissions(user).get("publish.send"):
                     schedule_job(db, target, user.id)
                     target.status = "queued"
-        post.payload = {**post.payload, "scheduledAt": scheduled_at.isoformat(), "platforms": platforms,
+        post.payload = {**post.payload, "scheduledAt": scheduled_at.isoformat(), "platforms": platforms, "platformSettings": options,
                         "scheduleRequestedBy": str(user.id), "autoSendAuthorized": effective_permissions(user).get("publish.send", False),
                         "publicationStatus": "queued" if post.approved_version == post.version and effective_permissions(user).get("publish.send") else "held"}
         post.stage = "scheduled" if post.approved_version == post.version else "review"

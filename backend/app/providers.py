@@ -1,5 +1,6 @@
 """Official provider APIs. Only this module knows their request/response shapes."""
 import json
+from urllib.parse import quote
 import httpx
 from app.config import settings
 
@@ -82,6 +83,12 @@ class Zernio:
     def accounts(self):
         params = {"profileId": settings.zernio_profile_id} if settings.zernio_profile_id else {}
         return self.request("GET", "/accounts", params=params).get("accounts", [])
+
+    def pinterest_boards(self, account_id: str):
+        return self.request("GET", f"/accounts/{quote(account_id, safe='')}/pinterest-boards").get("boards", [])
+
+    def tiktok_creator_info(self, account_id: str, media_type: str):
+        return self.request("GET", f"/accounts/{quote(account_id, safe='')}/tiktok/creator-info", params={"mediaType": media_type})
 
     def schedule(self, body: dict, key: str):
         return self.request("POST", "/posts", key=key, json=body)

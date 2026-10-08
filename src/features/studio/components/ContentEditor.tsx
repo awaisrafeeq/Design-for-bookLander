@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { useStudio } from './StudioProvider';
 import { Icon } from './Icon';
 import type { Format, Platform, Post } from '../types';
+import { PUBLISHING_TARGETS } from '../publishing';
 
 export function ContentEditor({ post, readOnly = false }: { post: Post; readOnly?: boolean }) {
   const { state, command, upload, pending } = useStudio();
@@ -29,7 +30,7 @@ export function ContentEditor({ post, readOnly = false }: { post: Post; readOnly
   }
   return <section className="card pad sec content-editor">
     <b>{readOnly ? 'Saved content' : 'Content'}</b>
-    <div className="editor-format"><label>Format<select value={post.format} disabled={pending || !can('content.edit')} onChange={event => void command('posts', {action:'configure',id:post.id,version:post.version,format:event.target.value as Format,platform:post.platform})}><option value="image">Image</option><option value="carousel">Carousel</option><option value="video">Video</option></select></label><label>Platform<select value={post.platform} disabled={pending || !can('content.edit')} onChange={event => void command('posts', {action:'configure',id:post.id,version:post.version,format:post.format,platform:event.target.value as Platform})}><option>Instagram</option><option>Facebook</option></select></label></div>
+    <div className="editor-format"><label>Format<select value={post.format} disabled={pending || !can('content.edit')} onChange={event => void command('posts', {action:'configure',id:post.id,version:post.version,format:event.target.value as Format,platform:post.platform})}><option value="image" disabled={post.platform==='YouTube'}>Image</option><option value="carousel" disabled={post.platform==='YouTube'||post.platform==='Pinterest'}>Carousel</option><option value="video">Video</option></select></label><label>Primary platform<select value={post.platform} disabled={pending || !can('content.edit')} onChange={event => void command('posts', {action:'configure',id:post.id,version:post.version,format:post.format,platform:event.target.value as Platform})}>{PUBLISHING_TARGETS.map(target => <option key={target.name} disabled={target.name==='YouTube'&&post.format!=='video'||target.name==='Pinterest'&&post.format==='carousel'}>{target.name}</option>)}</select></label></div>
     {post.note && <label>Your idea input<textarea rows={3} maxLength={1000} value={note} readOnly={!can('content.edit')} onChange={event => setNote(event.target.value)}/></label>}
     <label>Caption<textarea rows={5} value={caption} readOnly={!can('content.edit')} onChange={event => setCaption(event.target.value)} placeholder="Write a caption or generate a draft"/></label>
     <label>Hashtags<input value={tags} readOnly={!can('content.edit')} onChange={event => setTags(event.target.value)} placeholder="Optional hashtags"/></label>

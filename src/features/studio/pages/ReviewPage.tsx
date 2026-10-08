@@ -5,7 +5,7 @@ import { useEffect, useState } from 'react';
 import { useStudio } from '../components/StudioProvider';
 import { Cover, FormatChip, Icon, Media, Who } from '../components/Design';
 import { usePostVersion, VersionPicker } from '../components/PostVersions';
-import { ScheduleComposer } from '../components/Scheduling';
+import { ScheduleComposer } from '../components/PublishingComposer';
 import type { Post } from '../types';
 
 function ReviewWorkspace({ post, queue, select }: { post: Post; queue: Post[]; select: (id:number) => void }) {
