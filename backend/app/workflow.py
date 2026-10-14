@@ -7,7 +7,7 @@ from sqlalchemy import select
 
 from app.config import settings
 from app.jobs import ACTIVE, brand_snapshot, queue, save_checks, schedule_job, editable_stage, workflow_stage
-from app.models import ProviderAccount, Publication, StudioPost, User, WorkJob
+from app.models import ProviderAccount, Publication, SourceItem, SourceSetting, StudioPost, User, WorkJob
 from app.permissions import effective_permissions, require_permission
 from app.providers import ProviderError, Zernio
 from app.publishing import PLATFORMS, validate_targets
@@ -22,11 +22,35 @@ def generation_command(db, user, command):
     policy = brand_snapshot(db)
     if action == "suggest":
         topics = db.scalars(select(StudioPost).where(StudioPost.stage == "idea").order_by(StudioPost.created_at.desc()).with_for_update()).all()
-        manual = [{"id": post.id, "title": post.payload["title"], "note": post.payload.get("note", ""), "source": "team"}
-                  for post in topics if post.payload.get("human")][:20]
-        if not manual:
-            raise HTTPException(422, "Add a manual topic before suggesting AI ideas.")
-        queue(db, "suggest", "OpenRouter", user.id, payload={"topics": manual, "brand": policy})
+        candidates = [{"id": f"team:{post.id}", "title": post.payload["title"],
+                       "summary": post.payload.get("note", ""), "source": "team", "sourceLabel": "Team topic"}
+                      for post in topics if post.payload.get("human")][:15]
+        source_settings = {row.key: row.enabled for row in db.scalars(select(SourceSetting)).all()}
+        enabled_categories = [key for key in ("calendar", "news", "books") if source_settings.get(key)]
+        enabled_providers = []
+        if source_settings.get("calendar"):
+            enabled_providers.append("calendarific")
+        if source_settings.get("books"):
+            enabled_providers.append("nyt_books")
+        if source_settings.get("news"):
+            news_setting = db.get(SourceSetting, "news")
+            enabled_providers.append((news_setting.provider if news_setting else None) or settings.news_source_provider)
+        if enabled_categories:
+            cutoff = datetime.now(UTC) - timedelta(days=30)
+            today = datetime.now(ZoneInfo(settings.booklender_timezone)).date()
+            feed_items = db.scalars(select(SourceItem).where(
+                SourceItem.active.is_(True), SourceItem.category.in_(enabled_categories), SourceItem.provider.in_(enabled_providers),
+                ((SourceItem.event_date.is_not(None)) & (SourceItem.event_date >= today)) |
+                ((SourceItem.event_date.is_(None)) & ((SourceItem.published_at.is_(None)) | (SourceItem.published_at >= cutoff)))
+            ).order_by(SourceItem.event_date.asc().nullslast(), SourceItem.published_at.desc().nullslast()).limit(20)).all()
+            candidates.extend({"id": f"source:{item.id}", "title": item.title, "summary": (item.summary or "")[:700],
+                "source": item.category, "sourceLabel": {"calendar": "Calendar", "news": "News", "books": "Books"}[item.category],
+                "provider": item.provider, "url": item.url, "eventDate": item.event_date.isoformat() if item.event_date else None,
+                "publishedAt": item.published_at.isoformat() if item.published_at else None,
+                "metadata": item.metadata_json or {}} for item in feed_items)
+        if not candidates:
+            raise HTTPException(422, "Enable a configured source and sync it, or add a team topic before suggesting ideas.")
+        queue(db, "suggest", "OpenRouter", user.id, payload={"topics": candidates[:35], "brand": policy})
     else:
         query = select(StudioPost).with_for_update()
         if action == "generate-all":
@@ -51,7 +75,7 @@ def generation_command(db, user, command):
                 if post.stage != "idea":
                     raise HTTPException(409, "New angles are available for ideas only.")
                 queue(db, "new_angle", "OpenRouter", user.id, post.id,
-                      {"topics": [{"id": post.id, "title": post.payload["title"], "note": post.payload.get("note", "")}], "brand": policy})
+                      {"topics": [{"id": str(post.id), "title": post.payload["title"], "summary": post.payload.get("note", ""), "source": "team"}], "brand": policy})
                 continue
             if action == "generate-media":
                 if post.stage not in {"selected", "review"}:

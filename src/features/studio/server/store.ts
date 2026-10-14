@@ -14,7 +14,7 @@ export function readResource(resource: string) {
   if (resource === 'snapshot') return clone(state);
   if (['posts', 'ideas', 'review', 'schedule'].includes(resource)) return clone(state.posts);
   if (resource === 'dashboard') return clone({ posts: state.posts, spend: state.spend, connections: state.connections, activity: state.activity });
-  if (resource === 'sources') return clone({ sources: state.sources, connections: state.connections, events: state.events });
+  if (resource === 'sources') return clone({ sources: state.sources, connections: state.connections, events: state.events, providers: state.sourceFeeds || {}, newsProvider: state.newsProvider || 'currents' });
   if (resource === 'brand' || resource === 'spend' || resource === 'team') return clone(state[resource]);
   if (resource === 'logs') return clone(state.activity);
   if (resource === 'results') return clone(state.results);

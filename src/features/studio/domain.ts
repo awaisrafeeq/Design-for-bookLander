@@ -13,7 +13,7 @@ export const formats: Record<Format, { label: string; icon: string; tool: string
   carousel: { label: 'Carousel', icon: 'stack', tool: 'Predis', cost: .6 },
   image: { label: 'Image', icon: 'image', tool: 'Predis', cost: .3 },
 };
-export const sources = { calendar: { label: 'Calendar', icon: 'cal' }, news: { label: 'News', icon: 'news' }, team: { label: 'Team', icon: 'user' } };
+export const sources = { calendar: { label: 'Calendar', icon: 'cal' }, news: { label: 'News', icon: 'news' }, books: { label: 'Books', icon: 'book' }, team: { label: 'Team', icon: 'user' } };
 export const owners = { ai: { label: 'AI', icon: 'spark' }, team: { label: 'Team', icon: 'user' }, both: { label: 'AI + Team', icon: 'spark' }, auto: { label: 'Automatic', icon: 'clock' } };
 export const modules = ['Board', 'Ideas', 'Review', 'Schedule', 'Results', 'Sources', 'Brand', 'AI spend', 'Team', 'Logs'];
 export const roles: Record<TeamMember['role'], string[]> = { 'Super admin': modules, 'Campaigns manager': ['Board', 'Ideas', 'Review', 'Schedule', 'Results', 'Sources', 'Brand', 'AI spend', 'Logs'], Approver: ['Board', 'Ideas', 'Review', 'Schedule', 'Results', 'Logs'], Editor: ['Board', 'Ideas', 'Schedule', 'Sources', 'Brand', 'Logs'], Viewer: ['Board', 'Schedule', 'Results'] };

@@ -89,7 +89,7 @@ export async function GET(request: NextRequest, context: Context) {
       };
       const seed = readResource('snapshot') as StudioState;
       const emptyResults = { ...seed.results, posts: 0, kpi: { reach: [0, 0], impressions: [0, 0], er: [0, 0], clicks: [0, 0], followers: [0, 0] }, weeks: seed.results.weeks.map(item => ({ ...item, value: 0 })), byFormat: seed.results.byFormat.map(item => ({ ...item, engagement: 0 })), byPlatform: seed.results.byPlatform.map(item => ({ ...item, engagement: 0 })), best: 'Waiting for verified publishing and analytics data.', learned: [] };
-      return NextResponse.json({ ...seed, modules: user?.modules || [], permissions: user?.permissions || {}, books: {}, videos: [], news: { read: 0, kept: 0 }, accounts: sourcesState.accounts || [], brand: brandState, spend: spendState, team: teamState, posts: postsState, activity: logsState, events: sourcesState.events, connections: sourcesState.connections, sources: sourcesState.sources, summary: postCounts, results: emptyResults }, { headers: { 'Cache-Control': 'no-store' } });
+      return NextResponse.json({ ...seed, modules: user?.modules || [], permissions: user?.permissions || {}, books: {}, videos: [], news: { read: 0, kept: 0 }, accounts: sourcesState.accounts || [], brand: brandState, spend: spendState, team: teamState, posts: postsState, activity: logsState, events: sourcesState.events, connections: sourcesState.connections, sources: sourcesState.sources, sourceFeeds: sourcesState.providers || {}, newsProvider: sourcesState.newsProvider || 'currents', summary: postCounts, results: emptyResults }, { headers: { 'Cache-Control': 'no-store' } });
     }
     return NextResponse.json(readResource(resource), { headers: { 'Cache-Control': 'no-store' } });
   }

@@ -1,8 +1,8 @@
-import type { Activity, Connection, Event, Post, Source, TeamMember, StudioState, ResultMetrics } from './types';
+import type { Activity, Connection, Event, Post, Source, SourceProvider, TeamMember, StudioState, ResultMetrics } from './types';
 
 export type Dashboard = { posts: Post[]; spend: Spend; connections: Connection[]; activity: Activity[] };
 export type Spend = StudioState['spend'];
-export type Sources = { sources: Record<Source, boolean>; connections: Connection[]; events: Event[] };
+export type Sources = { sources: Record<Source, boolean>; connections: Connection[]; events: Event[]; providers?: Record<string, SourceProvider>; newsProvider?: 'currents' | 'newsdata'; accounts?: StudioState['accounts'] };
 export type Brand = StudioState['brand'];
 export type Results = ResultMetrics;
 export type ResourceMap = { snapshot: StudioState; dashboard: Dashboard; posts: Post[]; ideas: Post[]; review: Post[]; schedule: Post[]; calendar: Post[]; media: unknown; results: Results; sources: Sources; brand: Brand; spend: Spend; team: TeamMember[]; logs: Activity[] };

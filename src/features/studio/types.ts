@@ -2,7 +2,7 @@ export type Stage = 'idea' | 'selected' | 'generating' | 'review' | 'revision' |
 export type Format = 'video' | 'carousel' | 'image';
 export type Platform = 'Instagram' | 'Facebook' | 'LinkedIn' | 'Pinterest' | 'X' | 'YouTube' | 'TikTok';
 export type PublishingPlatform = Platform;
-export type Source = 'calendar' | 'news' | 'team';
+export type Source = 'calendar' | 'news' | 'books' | 'team';
 
 export interface Post {
   id: number;
@@ -27,6 +27,7 @@ export interface Post {
   tags?: string;
   warning?: string;
   note?: string;
+  sourceEvidence?: { id: string; title: string; summary?: string; source: Source; sourceLabel?: string; provider?: string; url?: string; eventDate?: string; publishedAt?: string }[];
   scheduledAt?: string;
   error?: string;
   reach?: number;
@@ -54,7 +55,8 @@ export interface Post {
 }
 
 export interface Connection { id: string; name: string; purpose: string; connected: boolean; detail?: string }
-export interface Event { id: number; name: string; source: Source; date: string; days: number; titles: number }
+export interface Event { id: number | string; name: string; source: Source; date: string; days: number; titles: number; url?: string; summary?: string; provider?: string }
+export interface SourceProvider { label: string; configured: boolean; enabled: boolean; status: string; error?: string | null; lastSyncedAt?: string | null; items: number }
 export interface BrandStyle { format: Format; name: string; guidance: string }
 export interface TeamMember { id: number | string; name: string; initials: string; email: string; role: 'Super admin' | 'Campaigns manager' | 'Approver' | 'Editor' | 'Viewer'; modules: string[]; invited?: boolean; isApprover?: boolean; permissions?: Record<string, boolean>; roleTitles?: string[]; active?: boolean }
 export interface Activity { id: number | string; at: string; actor: string; level: 'info' | 'success' | 'warning' | 'error'; message: string; detail?: string; cause?: string; fix?: string; connectionId?: string; done?: boolean; jobId?: string; postId?: number; status?: string; attempts?: number; providerJobId?: string; nextRetryAt?: string; result?: { credits?: number; ttsCredits?: number; model?: string; usage?: { cost?: number; prompt_tokens?: number; completion_tokens?: number } }; history?: { at: string; attempt: number; status: string; cause?: string }[] }
@@ -78,6 +80,8 @@ export interface StudioState {
   sources: Record<Source, boolean>;
   connections: Connection[];
   events: Event[];
+  sourceFeeds?: Record<string, SourceProvider>;
+  newsProvider?: 'currents' | 'newsdata';
   brand: { voice: string; never: string[]; styles: BrandStyle[]; reference: { postId: number; note: string } };
   team: TeamMember[];
   activity: Activity[];

@@ -10,8 +10,9 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.auth import get_current_session, require_csrf
+from app.config import settings
 from app.db import get_db
-from app.models import AuditEvent, AuthSession, BrandPolicyVersion, BrandRule, Invitation, ProviderAccount, SourceSetting, SpendEntry, SpendSettings, StudioPost, User
+from app.models import AuditEvent, AuthSession, BrandPolicyVersion, BrandRule, Invitation, ProviderAccount, SourceItem, SourceSetting, SpendEntry, SpendSettings, StudioPost, User
 from app.security import hash_password, hash_session_token
 from app.jobs import ACTIVE, job_dto, save_checks, snapshot_post, editable_stage, workflow_stage
 from app.models import WorkJob, Publication
@@ -19,6 +20,7 @@ from app.permissions import PERMISSIONS, effective_permissions, require_permissi
 from app.workflow import generation_command, connections_dto, schedule_command, sync_accounts, accounts_dto
 from app.providers import Zernio
 from app.publishing import PLATFORMS
+from app.source_feeds import configured_providers, source_events, source_feed_status
 
 router = APIRouter(prefix="/studio", tags=["studio settings"])
 
@@ -251,10 +253,12 @@ def read_posts(db: Session) -> list[dict]:
 
 
 def read_sources(db: Session) -> dict:
-    defaults = {"calendar": False, "news": False, "team": True}
+    defaults = {"calendar": False, "news": False, "books": False, "team": True}
     rows = db.scalars(select(SourceSetting)).all()
     for row in rows: defaults[row.key] = row.enabled
-    return {"sources": defaults, "connections": connections_dto(db), "events": [], "accounts": accounts_dto(db)}
+    providers, news_provider = source_feed_status(db)
+    return {"sources": defaults, "connections": connections_dto(db), "events": source_events(db),
+            "accounts": accounts_dto(db), "providers": providers, "newsProvider": news_provider}
 
 
 def read_logs(db: Session) -> list[dict]:
@@ -292,14 +296,49 @@ def mutate_sources(db: Session, user: User, request: Request, command: dict) -> 
         return {"message": "Publishing account selected"}
     if command.get("action") == "reconnect":
         return {"message": "Open Zernio Connections to reconnect the account, then Sync accounts here.", "url": "https://zernio.com/dashboard/connections"}
+    if command.get("action") == "sync-feeds":
+        configured = configured_providers()
+        settings_rows = {row.key: row for row in db.scalars(select(SourceSetting)).all()}
+        news_provider = (settings_rows.get("news").provider if settings_rows.get("news") else None) or settings.news_source_provider
+        wanted = [("calendar", "calendarific"), ("books", "nyt_books"), ("news", news_provider)]
+        if not any((settings_rows.get(category) and settings_rows[category].enabled) and configured.get(provider)
+                   for category, provider in wanted):
+            raise HTTPException(422, "Enable a configured feed first. Add its API key to backend/.env and restart the API and worker.")
+        try:
+            from app.worker import sync_idea_sources
+            sync_idea_sources.delay(force=True)
+        except Exception:
+            raise HTTPException(503, "Could not queue feed sync. Check that Redis and the worker are running.") from None
+        audit(db, user, request, "source.feed_sync_queued", "source_sync", "feeds", {})
+        db.commit()
+        return {"message": "Feed sync queued. This page will show the results when it finishes."}
+    if command.get("action") == "news-provider":
+        provider = command.get("provider")
+        if provider not in {"currents", "newsdata"}:
+            raise HTTPException(422, "Choose Currents or NewsData.io.")
+        setting = db.get(SourceSetting, "news")
+        if setting is None:
+            setting = SourceSetting(key="news", enabled=False, provider=provider, updated_by=user.id)
+            db.add(setting)
+        else:
+            setting.provider = provider
+            setting.updated_by = user.id
+        audit(db, user, request, "source.news_provider_selected", "source_setting", "news", {"provider": provider})
+        db.commit()
+        return {"message": "News provider saved."}
     if command.get("action") != "toggle":
         raise HTTPException(status_code=503, detail="Provider connection changes are not synced with the app yet.")
     key = command.get("key")
     value = command.get("value")
-    if key not in {"calendar", "news", "team"} or not isinstance(value, bool):
+    if key not in {"calendar", "news", "books", "team"} or not isinstance(value, bool):
         raise HTTPException(status_code=422, detail="Choose a valid source and enabled state")
-    if key != "team" and value:
-        raise HTTPException(422, "External sources are deferred. Manual team topics are available now.")
+    if value and key != "team":
+        providers = configured_providers()
+        news_setting = db.get(SourceSetting, "news") if key == "news" else None
+        provider = "calendarific" if key == "calendar" else "nyt_books" if key == "books" else ((news_setting.provider if news_setting else None) or settings.news_source_provider)
+        if not providers.get(provider, False):
+            labels = {"calendarific": "CALENDARIFIC_API_KEY", "nyt_books": "NYT_API_KEY", "currents": "CURRENTS_API_KEY", "newsdata": "NEWSDATA_API_KEY"}
+            raise HTTPException(422, f"Add {labels[provider]} to backend/.env and restart the API and worker before enabling this feed.")
     setting = db.get(SourceSetting, key)
     if setting is None:
         setting = SourceSetting(key=key, enabled=value, updated_by=user.id)
@@ -308,7 +347,7 @@ def mutate_sources(db: Session, user: User, request: Request, command: dict) -> 
         setting.enabled = value; setting.updated_by = user.id
     audit(db, user, request, "source.setting_updated", "source_setting", str(key), {"enabled": value})
     db.commit()
-    return {"message": "Source preference saved. Feed ingestion is a separate integration step."}
+    return {"message": "Source preference saved."}
 
 
 def mutate_post(db: Session, user: User, request: Request, command: dict) -> dict:

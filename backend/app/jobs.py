@@ -98,7 +98,7 @@ def execute_text(db, job, post):
         "Use only supplied evidence. Do not invent inventory, title availability or factual claims. "
         f"Voice: {policy['voice']}. Rules: {json.dumps(policy['rules'])}.")
     if job.kind in {"suggest", "new_angle"}:
-        instruction += ' Return {"ideas":[{"title":"...","reason":"...","sourceIds":[1],"format":"image|carousel|video","platform":"Instagram|Facebook"}]}, at most 5 ideas. Every sourceIds value must identify a supplied topic; include at least one source per idea.'
+        instruction += ' Return {"ideas":[{"title":"...","reason":"...","sourceIds":["source id"],"format":"image|carousel|video","platform":"Instagram|Facebook"}]}, at most 5 ideas. Every sourceIds value must exactly identify a supplied topic; include at least one source per idea.'
         if job.kind == "new_angle":
             instruction += ' Return exactly one replacement angle for this existing topic, preserving its subject and user input. Do not suggest unrelated topics.'
         prompt = json.dumps(job.payload["topics"])
@@ -129,7 +129,7 @@ def execute_text(db, job, post):
         elif post.payload.get("platform") == "TikTok":
             instruction += " This post's primary platform is TikTok: keep caption and hashtags together under 2,200 characters."
         draft = {**post.payload, **job.payload.get("inputContent", {})}
-        context_keys = ("title", "note", "caption", "tags", "script", "mediaBrief", "videoDirection", "format", "platform", "source", "reason")
+        context_keys = ("title", "note", "caption", "tags", "script", "mediaBrief", "videoDirection", "format", "platform", "source", "reason", "sourceEvidence")
         prompt = json.dumps({
             "topic": {key: draft.get(key, "") for key in context_keys},
             "previousContent": {key: post.payload.get(key, "") for key in context_keys},
@@ -142,7 +142,7 @@ def execute_text(db, job, post):
     if job.kind in {"suggest", "new_angle"}:
         item = {"type": "object", "additionalProperties": False,
                 "properties": {"title": {"type": "string"}, "reason": {"type": "string"},
-                    "sourceIds": {"type": "array", "items": {"type": "integer"}},
+                    "sourceIds": {"type": "array", "items": {"type": "string"}},
                     "format": {"type": "string", "enum": ["image", "carousel", "video"]},
                     "platform": {"type": "string", "enum": ["Instagram", "Facebook"]}},
                 "required": ["title", "reason", "sourceIds", "format", "platform"]}
@@ -177,7 +177,7 @@ def execute_text(db, job, post):
             raise ValueError("The model returned no valid ideas. Refine the manual topic and retry.")
         if job.kind == "new_angle":
             match = next((item for item in ideas if isinstance(item, dict)
-                          and isinstance(item.get("sourceIds"), list) and post.id in item["sourceIds"]
+                          and isinstance(item.get("sourceIds"), list) and str(post.id) in item["sourceIds"]
                           and isinstance(item.get("title"), str) and item["title"].strip()), None)
             if not match:
                 raise ValueError("The model returned no new angle for this idea.")
@@ -198,7 +198,8 @@ def execute_text(db, job, post):
         for item in ideas[:5]:
             if not isinstance(item, dict) or not isinstance(item.get("sourceIds"), list):
                 continue
-            evidence = [topic for topic in topics if topic["id"] in item["sourceIds"]]
+            returned_ids = {str(value) for value in item["sourceIds"]}
+            evidence = [topic for topic in topics if str(topic["id"]) in returned_ids]
             if not evidence:
                 continue
             title = str(item.get("title", "")).strip()[:180]
@@ -206,12 +207,17 @@ def execute_text(db, job, post):
             if not title or key in existing:
                 continue
             existing.add(key)
-            payload = {"title": title, "book": "Team topic", "author": "BookLender", "bookId": None,
-                "cover": "#44546A", "accent": "#F2C14E", "source": "team", "event": "Team topic",
-                "reason": str(item.get("reason", "Suggested from your team's topics"))[:1000],
+            primary = evidence[0]
+            source = primary.get("source") if primary.get("source") in {"calendar", "news", "books", "team"} else "team"
+            source_label = primary.get("sourceLabel") or {"calendar": "Calendar", "news": "News", "books": "Books", "team": "Team topic"}[source]
+            metadata = primary.get("metadata") if isinstance(primary.get("metadata"), dict) else {}
+            payload = {"title": title, "book": primary.get("title") if source == "books" else "Team topic",
+                "author": str(metadata.get("author") or "BookLender")[:180], "bookId": None,
+                "cover": "#44546A", "accent": "#F2C14E", "source": source, "event": source_label,
+                "reason": str(item.get("reason", f"Suggested from {source_label}"))[:1000],
                 "format": item.get("format") if item.get("format") in {"image", "carousel", "video"} else "image",
                 "platform": item.get("platform") if item.get("platform") in {"Instagram", "Facebook"} else "Instagram",
-                "human": False, "sourceEvidence": evidence, "sourceIds": [topic["id"] for topic in evidence], "brandPolicyVersion": policy["version"],
+                "human": False, "sourceEvidence": evidence, "sourceIds": [str(topic["id"]) for topic in evidence], "brandPolicyVersion": policy["version"],
                 "observedAt": datetime.now(UTC).isoformat()}
             db.add(StudioPost(stage="idea", version=1, payload=payload, version_history=[], created_by=job.actor_id))
             count += 1

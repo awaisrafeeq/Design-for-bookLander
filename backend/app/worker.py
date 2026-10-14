@@ -17,6 +17,7 @@ celery_app.conf.update(
     beat_schedule={
         "studio-outbox": {"task": "booklender.process_jobs", "schedule": 15.0},
         "zernio-accounts": {"task": "booklender.sync_zernio_accounts", "schedule": 300.0},
+        "idea-source-feeds": {"task": "booklender.sync_idea_sources", "schedule": 21600.0},
     },
 )
 
@@ -44,3 +45,12 @@ def sync_zernio_accounts():
             sync_accounts(db)
     except Exception:
         logging.getLogger(__name__).exception("Zernio account sync failed; existing connections retained")
+
+
+@celery_app.task(name="booklender.sync_idea_sources", soft_time_limit=180, time_limit=210)
+def sync_idea_sources(force=False):
+    from app.db import SessionLocal
+    from app.source_feeds import sync_source_feeds
+
+    with SessionLocal() as db:
+        return sync_source_feeds(db, force=bool(force))
