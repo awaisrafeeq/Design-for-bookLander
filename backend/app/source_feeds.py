@@ -199,7 +199,25 @@ def sync_source_feeds(db: Session, *, force=False):
         db.commit()
         run_id = run.id
         try:
-            items = FETCHERS[provider]()
+            fetched_items = FETCHERS[provider]()
+            # Calendarific can return the same holiday for multiple regions, and
+            # NYT Books can list one ISBN in multiple bestseller lists. Keep one
+            # source row per provider/external ID to match the database constraint.
+            items_by_id = {}
+            for item in fetched_items:
+                external_id = item["external_id"]
+                if external_id not in items_by_id:
+                    items_by_id[external_id] = item
+                    continue
+                # Preserve all Calendarific holiday types when regional copies
+                # of the same holiday are collapsed into one record.
+                existing_types = items_by_id[external_id].get("metadata", {}).get("type")
+                incoming_types = item.get("metadata", {}).get("type")
+                if isinstance(existing_types, list) and isinstance(incoming_types, list):
+                    items_by_id[external_id]["metadata"]["type"] = list(
+                        dict.fromkeys([*existing_types, *incoming_types])
+                    )
+            items = list(items_by_id.values())
             added = 0
             for item in items:
                 existing = db.scalar(select(SourceItem).where(SourceItem.provider == provider,
@@ -220,7 +238,7 @@ def sync_source_feeds(db: Session, *, force=False):
                         metadata_json=item["metadata"]))
                     added += 1
             run.status = "succeeded"
-            run.fetched_count = len(items)
+            run.fetched_count = len(fetched_items)
             run.new_count = added
             run.finished_at = datetime.now(UTC)
             db.commit()
