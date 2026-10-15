@@ -102,7 +102,7 @@ def execute_text(db, job, post):
                         "description, and subject only as book reference context. Do not imply the title is in stock "
                         "or available to rent; this integration does not verify inventory.")
     if job.kind in {"suggest", "new_angle"}:
-        instruction += ' Return {"ideas":[{"title":"...","reason":"...","sourceIds":["source id"],"format":"image|carousel|video","platform":"Instagram|Facebook"}]}, at most 5 ideas. Every sourceIds value must exactly identify a supplied topic; include at least one source per idea.'
+        instruction += ' Return {"ideas":[{"title":"...","reason":"...","sourceIds":["source id"],"format":"image|carousel|video","platform":"Instagram|Facebook"}]}, at most 5 ideas. Every sourceIds value must exactly identify a supplied topic; include at least one source per idea. When supplied topics include multiple source categories (Calendar, News, Books, Team), include at least one idea from each available category before adding more ideas, up to the 5-idea limit.'
         if job.kind == "new_angle":
             instruction += ' Return exactly one replacement angle for this existing topic, preserving its subject and user input. Do not suggest unrelated topics.'
         prompt = json.dumps(job.payload["topics"])

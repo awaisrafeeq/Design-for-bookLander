@@ -28,22 +28,32 @@ def generation_command(db, user, command):
                       for post in topics if post.payload.get("human")][:15]
         source_settings = {row.key: row.enabled for row in db.scalars(select(SourceSetting)).all()}
         enabled_categories = [key for key in ("calendar", "news", "books") if source_settings.get(key)]
-        enabled_providers = []
-        if source_settings.get("calendar"):
-            enabled_providers.append("calendarific")
-        if source_settings.get("books"):
-            enabled_providers.append("nyt_books")
-        if source_settings.get("news"):
-            news_setting = db.get(SourceSetting, "news")
-            enabled_providers.append((news_setting.provider if news_setting else None) or settings.news_source_provider)
+        news_setting = db.get(SourceSetting, "news")
+        news_provider = (news_setting.provider if news_setting else None) or settings.news_source_provider
         if enabled_categories:
             cutoff = datetime.now(UTC) - timedelta(days=30)
             today = datetime.now(ZoneInfo(settings.booklender_timezone)).date()
-            feed_items = db.scalars(select(SourceItem).where(
-                SourceItem.active.is_(True), SourceItem.category.in_(enabled_categories), SourceItem.provider.in_(enabled_providers),
-                ((SourceItem.event_date.is_not(None)) & (SourceItem.event_date >= today)) |
-                ((SourceItem.event_date.is_(None)) & ((SourceItem.published_at.is_(None)) | (SourceItem.published_at >= cutoff)))
-            ).order_by(SourceItem.event_date.asc().nullslast(), SourceItem.published_at.desc().nullslast()).limit(20)).all()
+            feed_items_by_category = {}
+            for category in enabled_categories:
+                provider = {
+                    "calendar": "calendarific",
+                    "books": "nyt_books",
+                    "news": news_provider,
+                }[category]
+                feed_items_by_category[category] = db.scalars(select(SourceItem).where(
+                    SourceItem.active.is_(True), SourceItem.category == category,
+                    SourceItem.provider == provider,
+                    ((SourceItem.event_date.is_not(None)) & (SourceItem.event_date >= today)) |
+                    ((SourceItem.event_date.is_(None)) & ((SourceItem.published_at.is_(None)) | (SourceItem.published_at >= cutoff)))
+                ).order_by(SourceItem.event_date.asc().nullslast(), SourceItem.published_at.desc().nullslast()).limit(10)).all()
+            # Interleave categories so a large calendar feed cannot crowd out
+            # news or bestseller records from the model's limited prompt.
+            feed_items = []
+            for index in range(10):
+                for category in enabled_categories:
+                    rows = feed_items_by_category[category]
+                    if index < len(rows):
+                        feed_items.append(rows[index])
             candidates.extend({"id": f"source:{item.id}", "title": item.title, "summary": (item.summary or "")[:700],
                 "source": item.category, "sourceLabel": {"calendar": "Calendar", "news": "News", "books": "Books"}[item.category],
                 "provider": item.provider, "url": item.url, "eventDate": item.event_date.isoformat() if item.event_date else None,
