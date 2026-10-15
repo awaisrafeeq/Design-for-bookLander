@@ -67,7 +67,7 @@ export default function SourcesPage() {
     <section className="sec">
       <Header title="Background for the AI"><span className="small muted">Feed records become ideas only after you ask the AI to suggest them. Team members still pick each idea.</span></Header>
       <div className="grid2">
-        <div className="srcc ctx"><span className="ti"><Icon name="book"/></span><span className="t"><b>Catalogue</b><small>Inventory and availability checks will be connected after the catalogue migration is complete.</small></span><Chip tone="amber">Waiting for migration</Chip></div>
+        <div className="srcc ctx"><span className="ti"><Icon name="book"/></span><span className="t"><b>Catalogue</b><small>Read-only title details can enrich matching book drafts. Inventory and rental availability are not verified yet.</small></span><Chip tone="green">Connected · read-only</Chip></div>
         <Link className="srcc ctx" href="/brand"><span className="ti"><Icon name="brush"/></span><span className="t"><b>Brand rules</b><small>Voice, never-say list, styles</small></span><Icon name="chevR"/></Link>
       </div>
     </section>

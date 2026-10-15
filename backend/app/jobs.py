@@ -97,6 +97,10 @@ def execute_text(db, job, post):
         "Preserve the subject and unaffected content; without a revision request, create a fresh alternative on the same topic. "
         "Use only supplied evidence. Do not invent inventory, title availability or factual claims. "
         f"Voice: {policy['voice']}. Rules: {json.dumps(policy['rules'])}.")
+    if job.payload.get("catalogueBook"):
+        instruction += (" A catalogueBook object may be supplied in the input. Use its title, author, publisher, "
+                        "description, and subject only as book reference context. Do not imply the title is in stock "
+                        "or available to rent; this integration does not verify inventory.")
     if job.kind in {"suggest", "new_angle"}:
         instruction += ' Return {"ideas":[{"title":"...","reason":"...","sourceIds":["source id"],"format":"image|carousel|video","platform":"Instagram|Facebook"}]}, at most 5 ideas. Every sourceIds value must exactly identify a supplied topic; include at least one source per idea.'
         if job.kind == "new_angle":
@@ -136,6 +140,7 @@ def execute_text(db, job, post):
             "book_or_topic_title": post.payload.get("title", ""),
             "idea_note": draft.get("note", ""),
             "caption_context": draft.get("caption", ""),
+            "catalogueBook": job.payload.get("catalogueBook"),
             "revision": job.payload.get("note"),
             "formatGuidance": policy["formats"],
         })

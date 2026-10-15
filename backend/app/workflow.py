@@ -6,6 +6,7 @@ from fastapi import HTTPException
 from sqlalchemy import select
 
 from app.config import settings
+from app.catalogue import find_catalogue_book
 from app.jobs import ACTIVE, brand_snapshot, queue, save_checks, schedule_job, editable_stage, workflow_stage
 from app.models import ProviderAccount, Publication, SourceItem, SourceSetting, StudioPost, User, WorkJob
 from app.permissions import effective_permissions, require_permission
@@ -92,10 +93,13 @@ def generation_command(db, user, command):
                 if provider == "Creatify":
                     voiceover = post.payload.get("script") or post.payload["caption"]
                     direction = post.payload.get("videoDirection") or post.payload.get("mediaBrief") or ""
+                    catalogue_book = post.payload.get("catalogueBook") or {}
+                    book_reference = ", ".join(str(catalogue_book.get(key) or "") for key in ("title", "author", "subjects") if catalogue_book.get(key))
                     # Keep the video prompt purely visual. Boreal has echoed negative
                     # prompt instructions as both subtitles and narration, so avoid
                     # sending prohibition lists, section labels, or voice directions.
                     brief = (f"Cinematic vertical 9:16 book-related b-roll. {direction} "
+                             f"Book reference for topic accuracy only: {book_reference}. "
                              "Show three visually distinct shots with natural camera movement: a wide establishing view, "
                              "a close detail with a clear physical action, and a closing view. "
                              "Warm, polished editorial lighting; no talking avatar.")
@@ -104,9 +108,12 @@ def generation_command(db, user, command):
                     # Give Predis both the post context and AI-authored visual direction.
                     # Treat caption facts as context only; do not ask the image model to
                     # reproduce claims or text that a human has not verified.
+                    catalogue_book = post.payload.get("catalogueBook") or {}
+                    book_reference = ", ".join(str(catalogue_book.get(key) or "") for key in ("title", "author", "subjects") if catalogue_book.get(key))
                     brief = "\n".join((
                         "Create one social image for BookLender using the following brief.",
                         f"Book/topic: {post.payload.get('title', '')}",
+                        f"Catalogue reference for topic accuracy only; do not imitate its cover: {book_reference}",
                         f"Additional idea input: {post.payload.get('note', '')}",
                         f"Caption context (do not copy claims or quotes into the image): {post.payload.get('caption', '')}",
                         f"Hashtags/context: {post.payload.get('tags', '')}",
@@ -131,8 +138,14 @@ def generation_command(db, user, command):
                     raise HTTPException(422, "Draft contains invalid or oversized fields.")
                 if draft:
                     require_permission(user, "content.edit")
+                catalogue_book = find_catalogue_book(db, str(post.payload.get("title") or ""))
+                job_payload = {"note": note, "brand": policy, "inputContent": draft,
+                               "previousStage": post.stage}
+                if catalogue_book:
+                    job_payload["catalogueBook"] = catalogue_book
+                    post.payload = {**post.payload, "catalogueBook": catalogue_book}
                 queue(db, "revise" if action == "revise" else "write", "OpenRouter", user.id, post.id,
-                      {"note": note, "brand": policy, "inputContent": draft, "previousStage": post.stage})
+                      job_payload)
             post.approved_version = None
             post.stage = "revision" if action == "revise" else "generating"
             post.payload = {**post.payload, "error": None, "generationKind": "media" if action == "generate-media" else "text"}
