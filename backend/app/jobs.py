@@ -498,6 +498,12 @@ def run_job(job_id):
         db.commit()
         try:
             post = db.scalar(select(StudioPost).where(StudioPost.id == job.post_id).with_for_update()) if job.post_id else None
+            if post and post.stage == "archived" and job.kind in {"write", "revise", "media"}:
+                job.status = "cancelled"
+                job.cause = "Post was archived before generation completed."
+                job.fix = "Restore the post before requesting new content."
+                db.commit()
+                return
             if job.provider in {"OpenRouter", "Predis", "Creatify"}:
                 actor = db.get(User, job.actor_id) if job.actor_id else None
                 action = "ideas.suggest" if job.kind in {"suggest", "new_angle"} else "media.generate" if job.kind == "media" else "content.generate"

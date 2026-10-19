@@ -437,7 +437,7 @@ def mutate_post(db: Session, user: User, request: Request, command: dict) -> dic
     if post is None:
         raise HTTPException(status_code=404, detail="Post not found")
     post.stage = workflow_stage(post)
-    if db.scalar(select(WorkJob.id).where(WorkJob.post_id == post.id, WorkJob.status.in_(ACTIVE))):
+    if action != "archive" and db.scalar(select(WorkJob.id).where(WorkJob.post_id == post.id, WorkJob.status.in_(ACTIVE))):
         raise HTTPException(409, "Wait for the current background job before changing this post.")
     if action == "update" and post.stage == "review" and user.role != "admin" and "Review" not in user.module_access:
         raise HTTPException(status_code=403, detail="You do not have permission to edit a post in Review")
@@ -514,7 +514,8 @@ def mutate_post(db: Session, user: User, request: Request, command: dict) -> dic
         post.stage = "archived"
         for target in db.scalars(select(Publication).where(Publication.post_id == post.id, Publication.status == "held")):
             target.status = "cancelled"
-        post.payload = {**post.payload, "scheduledAt": None, "day": None, "time": None, "archiveReason": "Rejected by approver" if action == "reject" else "Skipped by team"}
+        archive_reason = "Rejected by approver" if action == "reject" else "Archived by team" if action == "archive" else "Skipped by team"
+        post.payload = {**post.payload, "scheduledAt": None, "day": None, "time": None, "archiveReason": archive_reason}
         message = "Moved to Archive"
     elif action == "restore":
         if post.stage != "archived":
