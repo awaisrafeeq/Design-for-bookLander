@@ -38,7 +38,7 @@ export default function SourcesPage() {
   return <>
     <section className="sec">
       <Header title="What starts ideas"><Who kind="auto"/></Header>
-      <div className="grid3">
+      <div className="sources-grid">
         {rows.map(key => {
           const provider = key === 'news' ? newsProvider : providers[providerFor[key] || ''];
           const isConfigured = key === 'team' || Boolean(provider?.configured);
@@ -52,7 +52,7 @@ export default function SourcesPage() {
           </button>;
         })}
       </div>
-      <div className="grid3" style={{marginTop:12}}>{rows.map(key=><label key={key} className="card pad small">{sources[key].label} idea backlog limit
+      <div className="sources-grid" style={{marginTop:12}}>{rows.map(key=><label key={key} className="card pad small source-limit-card">{sources[key].label} idea backlog limit
         <input type="number" min={0} max={50} value={limitDrafts[key] ?? feedState.ideaLimits?.[key] ?? 5} disabled={pending || !state.permissions?.['sources.manage']}
           onChange={event=>setLimitDrafts(current=>({...current,[key]:Number(event.target.value)}))}
           onBlur={event=>{const value=Number(event.target.value);if(value!==feedState.ideaLimits?.[key])void command('sources',{action:'idea-limit',key,value}).then(ok=>{if(ok)setLimitDrafts(current=>({...current,[key]:undefined}))});}}/>
