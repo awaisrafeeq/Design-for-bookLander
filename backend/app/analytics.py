@@ -70,6 +70,10 @@ def sync_publication_analytics(db: Session, *, force: bool = False):
                 stored.data_as_of = _datetime(source["analytics"].get("lastUpdated"))
                 stored.published_at = _datetime(response.get("publishedAt")) or stored.published_at
                 stored.error = None
+                day = now.date().isoformat()
+                history = [item for item in (stored.daily_history or []) if isinstance(item, dict) and item.get("date") != day]
+                history.append({"date": day, "metrics": stored.metrics})
+                stored.daily_history = history[-45:]
             else:
                 stored.sync_status = "pending"
                 stored.error = None

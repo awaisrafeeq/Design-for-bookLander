@@ -83,7 +83,7 @@ export interface StudioState {
   events: Event[];
   sourceFeeds?: Record<string, SourceProvider>;
   newsProvider?: 'currents' | 'newsdata';
-  brand: { voice: string; never: string[]; styles: BrandStyle[]; reference: { postId: number; note: string }; referencePosts?: {id:number; title:string}[] };
+  brand: { voice: string; never: string[]; styles: BrandStyle[]; reference: { postId: number; note: string }; referencePosts?: {id:number; title:string}[]; weeklyLearning?: {id:string;weekStart:string;weekEnd:string;postId:number;title:string;platform:string;format:string;metrics:{engagementGain:number;reachAtEnd:number;weeklyGainRate:number;samples:number};guidance:string;rationale:string}|null };
   team: TeamMember[];
   activity: Activity[];
   later: string[];

@@ -12,7 +12,9 @@ from sqlalchemy.orm import Session
 from app.auth import get_current_session, require_csrf
 from app.config import settings
 from app.db import get_db
-from app.models import AuditEvent, AuthSession, BrandPolicyVersion, BrandRule, Invitation, ProviderAccount, SourceItem, SourceSetting, SpendEntry, SpendSettings, StudioPost, User
+from app.models import (AuditEvent, AuthSession, BrandPolicyVersion, BrandRule, Invitation,
+                        ProviderAccount, SourceItem, SourceSetting, SpendEntry, SpendSettings,
+                        StudioPost, User, WeeklyStyleLearning)
 from app.security import hash_password, hash_session_token
 from app.jobs import ACTIVE, job_dto, save_checks, snapshot_post, editable_stage, workflow_stage
 from app.models import WorkJob, Publication
@@ -88,6 +90,19 @@ def read_brand(db: Session) -> dict:
                            .order_by(StudioPost.updated_at.desc()).limit(100)).all()
     rules = db.scalars(select(BrandRule).where(BrandRule.policy_version_id == policy.id).order_by(BrandRule.created_at, BrandRule.id)).all()
     guidance = policy.format_guidance or {}
+    learning = db.execute(select(WeeklyStyleLearning, StudioPost).join(
+        StudioPost, StudioPost.id == WeeklyStyleLearning.post_id)
+        .where(WeeklyStyleLearning.status == "pending")
+        .order_by(WeeklyStyleLearning.week_start.desc()).limit(1)).first()
+    learning_dto = None
+    if learning:
+        proposal, source_post = learning
+        learning_dto = {"id": str(proposal.id), "weekStart": proposal.week_start.isoformat(),
+                        "weekEnd": proposal.week_end.isoformat(), "postId": proposal.post_id,
+                        "title": (source_post.payload or {}).get("title", "Published post"),
+                        "platform": proposal.platform, "format": proposal.post_format,
+                        "metrics": proposal.evidence, "guidance": proposal.guidance,
+                        "rationale": proposal.rationale}
     return {
         "voice": policy.voice,
         "never": [rule.rule for rule in rules],
@@ -98,12 +113,53 @@ def read_brand(db: Session) -> dict:
         "reference": {"postId": policy.reference_post_id or 0, "note": policy.reference_note or ""},
         "referencePosts": [{"id": post.id, "title": post.payload.get("title", "Untitled")}
                            for post in published],
+        "weeklyLearning": learning_dto,
         "version": policy.version,
     }
 
 
 def mutate_brand(db: Session, user: User, request: Request, command: dict) -> dict:
     require_permission(user, "brand.edit")
+    if command.get("action") == "review-learning":
+        try:
+            learning_id = UUID(str(command.get("id")))
+        except (TypeError, ValueError):
+            raise HTTPException(422, "Choose a weekly learning suggestion") from None
+        decision = command.get("decision")
+        if decision not in {"approve", "dismiss"}:
+            raise HTTPException(422, "Choose approve or dismiss")
+        proposal = db.scalar(select(WeeklyStyleLearning).where(
+            WeeklyStyleLearning.id == learning_id, WeeklyStyleLearning.status == "pending").with_for_update())
+        if not proposal:
+            raise HTTPException(404, "This weekly learning suggestion is no longer pending")
+        if decision == "approve":
+            policy = active_brand(db, lock=True)
+            old_rules = db.scalars(select(BrandRule).where(BrandRule.policy_version_id == policy.id)
+                                   .order_by(BrandRule.created_at, BrandRule.id)).all()
+            guidance = dict(policy.format_guidance or {})
+            post_format = proposal.post_format if proposal.post_format in {"video", "carousel", "image"} else "image"
+            style = dict(guidance.get(post_format) or {})
+            existing = str(style.get("guidance") or "").strip()
+            style["guidance"] = (f"{existing}\nWeekly learning: {proposal.guidance}" if existing else proposal.guidance)[:4000]
+            style.setdefault("name", post_format.title())
+            guidance[post_format] = style
+            db.query(BrandPolicyVersion).filter(BrandPolicyVersion.active.is_(True)).update(
+                {"active": False}, synchronize_session=False)
+            updated = BrandPolicyVersion(version=policy.version + 1, voice=policy.voice,
+                                         format_guidance=guidance, reference_post_id=policy.reference_post_id,
+                                         reference_note=policy.reference_note or "", active=True, created_by=user.id)
+            db.add(updated)
+            db.flush()
+            db.add_all([BrandRule(policy_version_id=updated.id, rule=rule.rule) for rule in old_rules])
+        proposal.status = "approved" if decision == "approve" else "dismissed"
+        proposal.reviewed_at = datetime.now(UTC)
+        proposal.reviewed_by = user.id
+        db.add(AuditEvent(actor_user_id=user.id, action=f"brand.weekly_learning_{proposal.status}",
+                          resource_type="weekly_style_learning", resource_id=str(proposal.id),
+                          request_id=request.headers.get("x-request-id"),
+                          details={"postId": proposal.post_id, "weekStart": proposal.week_start.isoformat()}))
+        db.commit()
+        return {"message": "Weekly style learning approved" if decision == "approve" else "Suggestion dismissed"}
     policy = active_brand(db, lock=True)
     old_rules = db.scalars(select(BrandRule).where(BrandRule.policy_version_id == policy.id).order_by(BrandRule.created_at, BrandRule.id)).all()
     voice = policy.voice

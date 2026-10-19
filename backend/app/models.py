@@ -267,6 +267,27 @@ class PublicationAnalytics(Base):
     synced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
     data_as_of: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     error: Mapped[str | None] = mapped_column(Text)
+    daily_history: Mapped[list[dict]] = mapped_column(JSON, nullable=False, default=list)
+
+
+class WeeklyStyleLearning(Base):
+    __tablename__ = "weekly_style_learning"
+    __table_args__ = (UniqueConstraint("week_start", name="uq_weekly_style_learning_week_start"),)
+
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    week_start: Mapped[date] = mapped_column(Date, nullable=False)
+    week_end: Mapped[date] = mapped_column(Date, nullable=False)
+    publication_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("publications.id", ondelete="CASCADE"), nullable=False)
+    post_id: Mapped[int] = mapped_column(ForeignKey("studio_posts.id", ondelete="CASCADE"), nullable=False)
+    platform: Mapped[str] = mapped_column(String(40), nullable=False)
+    post_format: Mapped[str] = mapped_column(String(24), nullable=False)
+    evidence: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    guidance: Mapped[str] = mapped_column(Text, nullable=False)
+    rationale: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[str] = mapped_column(String(24), nullable=False, default="pending", index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    reviewed_by: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"))
 
 
 class AccountFollowerAnalytics(Base):

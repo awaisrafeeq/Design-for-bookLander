@@ -1,6 +1,7 @@
 import logging
 
 from celery import Celery
+from celery.schedules import crontab
 
 from app.config import settings
 
@@ -19,6 +20,7 @@ celery_app.conf.update(
         "zernio-accounts": {"task": "booklender.sync_zernio_accounts", "schedule": 300.0},
         "idea-source-feeds": {"task": "booklender.sync_idea_sources", "schedule": 21600.0},
         "zernio-analytics": {"task": "booklender.sync_zernio_analytics", "schedule": 900.0},
+        "weekly-post-style-learning": {"task": "booklender.learn_from_weekly_top_post", "schedule": crontab(minute=15, hour=8)},
     },
 )
 
@@ -69,3 +71,19 @@ def sync_zernio_analytics(force=False):
             logging.getLogger(__name__).exception("Zernio follower sync failed; existing follower data retained")
             follower_count = 0
         return {**sync_publication_analytics(db, force=bool(force)), "followerAccounts": follower_count}
+
+
+@celery_app.task(name="booklender.learn_from_weekly_top_post", soft_time_limit=180, time_limit=210)
+def learn_from_weekly_top_post():
+    if not settings.openrouter_api_key or not settings.openrouter_model:
+        logging.getLogger(__name__).info("Weekly style learning skipped: OpenRouter is not configured")
+        return {"status": "provider_not_configured"}
+    from app.db import SessionLocal
+    from app.style_learning import create_weekly_style_learning
+
+    try:
+        with SessionLocal() as db:
+            return create_weekly_style_learning(db)
+    except Exception:
+        logging.getLogger(__name__).exception("Weekly style learning failed; it will retry on the next daily run")
+        return {"status": "failed"}
