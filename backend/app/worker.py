@@ -18,6 +18,7 @@ celery_app.conf.update(
         "studio-outbox": {"task": "booklender.process_jobs", "schedule": 15.0},
         "zernio-accounts": {"task": "booklender.sync_zernio_accounts", "schedule": 300.0},
         "idea-source-feeds": {"task": "booklender.sync_idea_sources", "schedule": 21600.0},
+        "zernio-analytics": {"task": "booklender.sync_zernio_analytics", "schedule": 900.0},
     },
 )
 
@@ -54,3 +55,17 @@ def sync_idea_sources(force=False):
 
     with SessionLocal() as db:
         return sync_source_feeds(db, force=bool(force))
+
+
+@celery_app.task(name="booklender.sync_zernio_analytics", soft_time_limit=180, time_limit=210)
+def sync_zernio_analytics(force=False):
+    from app.analytics import sync_follower_analytics, sync_publication_analytics
+    from app.db import SessionLocal
+
+    with SessionLocal() as db:
+        try:
+            follower_count = sync_follower_analytics(db)
+        except Exception:
+            logging.getLogger(__name__).exception("Zernio follower sync failed; existing follower data retained")
+            follower_count = 0
+        return {**sync_publication_analytics(db, force=bool(force)), "followerAccounts": follower_count}

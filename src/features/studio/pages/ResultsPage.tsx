@@ -1,22 +1,94 @@
 'use client';
-import { useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { studioApi, type LiveResultPost, type LiveResults } from '../api';
 import { useStudio } from '../components/StudioProvider';
-import { Cover, Header, Icon, Who } from '../components/Design';
-import { BarChart, MetricChart } from '../components/Charts';
-import type { Post } from '../types';
+import { BarChart } from '../components/Charts';
 
-function TopPosts({ posts, view, onOpen }: { posts: Post[]; view: 'cards'|'table'; onOpen: (id:number)=>void }) {
-  if(view==='table')return <div className="tblwrap"><table className="tbl"><thead><tr><th>Post</th><th>Platform</th><th>Reach</th><th>Engagement</th></tr></thead><tbody>{posts.map(post=><tr key={post.id}><td style={{fontWeight:600}}>{post.title}</td><td>{post.platform}</td><td className="num">{post.reach?.toLocaleString()}</td><td className="num">{post.engagement}%</td></tr>)}</tbody></table></div>;
-  return <>{posts.map(post=><button key={post.id} className="rowi" style={{border:0,padding:'6px 0'}} onClick={()=>onOpen(post.id)}><Cover bookId={post.bookId}/><span className="t"><b>{post.title}</b><small>{post.platform}<i className="sep"/>{post.reach?.toLocaleString()} reached<i className="sep"/>{post.clicks} link clicks</small></span><span className="pill ok">{post.engagement}%</span></button>)}</>;
+const day = (date: Date) => date.toISOString().slice(0, 10);
+const daysAgo = (days: number) => day(new Date(Date.now() - days * 86400000));
+const number = (value: number | null | undefined) => value == null ? '—' : value.toLocaleString();
+const dateLabel = (value: string | null) => value ? new Intl.DateTimeFormat('en-US', {month:'short', day:'numeric', year:'numeric', timeZone:'America/New_York'}).format(new Date(value)) : 'Awaiting provider date';
+
+function PostTable({posts, onOpen}: {posts: LiveResultPost[]; onOpen: (id:number)=>void}) {
+  return <div className="tblwrap"><table className="tbl results-table"><thead><tr><th>Post</th><th>Platform</th><th>Published</th><th>Reach</th><th>Engagements</th><th>Clicks</th><th>Status</th></tr></thead><tbody>{posts.map(item=><tr key={item.publicationId}>
+    <td><button className="results-post-title" onClick={()=>onOpen(item.id)}>{item.title}</button><small>{item.format}</small></td>
+    <td>{item.platform}</td><td>{dateLabel(item.publishedAt || item.scheduledAt)}</td><td className="num">{number(item.metrics.reach)}</td><td className="num">{number(item.engagement)}</td><td className="num">{number(item.metrics.clicks)}</td>
+    <td><span className={`pill ${item.status === 'synced' ? 'ok' : ''}`}>{item.status === 'synced' ? 'Synced' : item.status === 'failed' ? 'Sync failed' : 'Pending'}</span></td>
+  </tr>)}</tbody></table></div>;
 }
+
 export default function ResultsPage() {
-  const {state,openPost}=useStudio();const results=state.results;const kpi=results.kpi;
-  const [sort,setSort]=useState<'er'|'reach'>('er');const [view,setView]=useState<'cards'|'table'>('cards');
-  const published=state.posts.filter(post=>post.stage==='published').sort((a,b)=>sort==='reach'?(b.reach||0)-(a.reach||0):(b.engagement||0)-(a.engagement||0));
-  const short=(n:number)=>n>=1000?`${(n/1000).toFixed(n>=100000?0:1)}K`:String(n);
-  const change=(current:number,previous:number,points=false)=>{const n=points?current-previous:(current-previous)/previous*100;return <small className={`delta ${n>=0?'up':'down'}`}>{n>=0?'+':''}{points?n.toFixed(1):Math.round(n)}{points?' points':'%'} vs previous 30 days</small>};
-  return <><div className="sechead"><span className="chip">Last 30 days</span><span className="chip">Connected publishing platforms</span>{results.posts > 0 && <span className="small muted r">Synced data from connected posts</span>}</div>{results.posts === 0 ? <div className="card empty"><span className="ring"><Icon name="chart"/></span><h2>No performance data yet</h2><span>Verified metrics will appear after posts are published and analytics sync is connected.</span></div> : <><div className="kpis"><div className="kpi"><span>Reach</span><b>{short(kpi.reach[0])}</b>{change(...kpi.reach)}</div><div className="kpi"><span>Impressions</span><b>{short(kpi.impressions[0])}</b>{change(...kpi.impressions)}</div><div className="kpi hi"><span>Engagement rate</span><b>{kpi.er[0]}%</b>{change(...kpi.er,true)}</div><div className="kpi"><span>Link clicks</span><b>{kpi.clicks[0].toLocaleString()}</b>{change(...kpi.clicks)}</div><div className="kpi"><span>New followers</span><b>+{kpi.followers[0]}</b>{change(...kpi.followers)}</div></div>
-    <section className="card pad sec"><Header title="Reach per week"><span className="small muted r">People who saw a post, last 8 weeks</span></Header><BarChart data={results.weeks} width={1200} height={260} max={40} step={10} format={value=>value?`${value}K`:'0'} label="Reach per week in thousands, last 8 weeks"/></section>
-    <section className="card pad sec"><Header title="What works"><span className="small muted r">Engagement rate</span></Header><div className="wworks"><div className="wpanel"><MetricChart title="By format" data={results.byFormat.map(item=>({label:item.format[0].toUpperCase()+item.format.slice(1),value:item.engagement}))} label="Engagement rate by format"/></div><div className="wpanel"><MetricChart title="By platform" data={results.byPlatform.map(item=>({label:item.platform,value:item.engagement}))} label="Engagement rate by platform"/></div></div><div className="besttime"><Icon name="clock"/><span><b>Best time to post</b><span className="small muted">{results.best}</span></span></div><span className="small muted">Engagement rate is likes, comments, shares and saves, divided by reach.</span></section>
-    <div className="two"><section className="card pad sec"><Header title="What the AI learned"><Who kind="ai"/></Header>{results.learned.map(item=><div className="learn" key={item.title}><span className="t"><b>{item.title}</b><span className="small muted">{item.use}</span></span><span className="chip ai"><Icon name="retry"/>Used next</span></div>)}</section><section className="card pad sec"><Header title="Top posts"><div className="tools r"><button className={`fchip ${sort==='er'?'on':''}`} onClick={()=>setSort('er')}>By engagement</button><button className={`fchip ${sort==='reach'?'on':''}`} onClick={()=>setSort('reach')}>By reach</button><span className="viewtog"><button className={view==='cards'?'on':''} aria-label="Card view" onClick={()=>setView('cards')}><Icon name="stack"/></button><button className={view==='table'?'on':''} aria-label="Table view" onClick={()=>setView('table')}><Icon name="list"/></button></span></div></Header><TopPosts posts={published} view={view} onOpen={openPost}/></section></div></>}</>;
+  const {openPost} = useStudio();
+  const [period, setPeriod] = useState(30);
+  const [customFrom, setCustomFrom] = useState(daysAgo(29));
+  const [customTo, setCustomTo] = useState(day(new Date()));
+  const [platform, setPlatform] = useState('all');
+  const [accountId, setAccountId] = useState('all');
+  const [format, setFormat] = useState('all');
+  const [results, setResults] = useState<LiveResults | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [refreshing, setRefreshing] = useState(false);
+  const load = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true);
+    try {
+      const data = await studioApi.results({fromDate:period===0?customFrom:daysAgo(period-1), toDate:period===0?customTo:day(new Date()), platform, accountId, format});
+      setResults(data); setError('');
+    } catch (cause) { setError(cause instanceof Error ? cause.message : 'Could not load Results'); }
+    finally { if (!silent) setLoading(false); }
+  }, [period,customFrom,customTo,platform,accountId,format]);
+  useEffect(()=>{void load();},[load]);
+  useEffect(()=>{const timer=window.setInterval(()=>{void load(true);},60000);return ()=>window.clearInterval(timer);},[load]);
+  const refresh = async () => {
+    setRefreshing(true);
+    try { await studioApi.act('results',{action:'sync'}); setError('Analytics refresh queued. New data may take a few minutes.'); }
+    catch (cause) { setError(cause instanceof Error ? cause.message : 'Could not queue analytics refresh'); }
+    finally { setRefreshing(false); }
+  };
+  const chart = useMemo(()=>{
+    if (!results) return [];
+    const size = results.daily.length <= 14 ? 1 : 7;
+    const buckets: {label:string;value:number}[] = [];
+    for (let i=0;i<results.daily.length;i+=size) {
+      const slice=results.daily.slice(i,i+size);
+      buckets.push({label:new Intl.DateTimeFormat('en-US',{month:'short',day:'numeric',timeZone:'UTC'}).format(new Date(`${slice[0].date}T00:00:00Z`)),value:slice.reduce((sum,item)=>sum+item.posts,0)});
+    }
+    return buckets;
+  },[results]);
+  const accounts=results?.accounts.filter(item=>platform==='all'||item.platform.toLowerCase()===platform)||[];
+  const kpis=results ? [
+    ['Published posts', number(results.publishedPosts), 'BookLender posts in this period'],
+    ['Reach', number(results.totals.reach), `${results.metricCoverage.reach}/${results.publishedPosts} posts reporting`],
+    ['Impressions', number(results.totals.impressions), `${results.metricCoverage.impressions}/${results.publishedPosts} posts reporting`],
+    ['Engagements', number(results.engagement), 'Likes + comments + shares + saves'],
+    ['Engagement rate', results.engagementRate == null ? '—' : `${results.engagementRate.toFixed(2)}%`, 'Engagements ÷ reported post reach'],
+    ['Link clicks', number(results.totals.clicks), `${results.metricCoverage.clicks}/${results.publishedPosts} posts reporting`],
+  ] : [];
+  return <div className="results-page">
+    <div className="results-intro"><div><h2>Publishing performance</h2><p>Live Zernio metrics for posts published through BookLender.</p></div><button className="btn" onClick={refresh} disabled={refreshing}>{refreshing?'Queuing…':'Refresh analytics'}</button></div>
+    <div className="card results-filters">
+      <label>Period<select value={period} onChange={event=>setPeriod(Number(event.target.value))}><option value={7}>Last 7 days</option><option value={30}>Last 30 days</option><option value={90}>Last 90 days</option><option value={365}>Last 365 days</option><option value={0}>Custom dates</option></select></label>
+      <label>Platform<select value={platform} onChange={event=>{setPlatform(event.target.value);setAccountId('all');}}><option value="all">All platforms</option>{[...new Set(results?.accounts.map(item=>item.platform)||[])].sort().map(item=><option value={item.toLowerCase()} key={item}>{item}</option>)}</select></label>
+      <label>Account<select value={accountId} onChange={event=>setAccountId(event.target.value)}><option value="all">All connected accounts</option>{accounts.map(item=><option value={item.id} key={item.id}>{item.name} · {item.platform}</option>)}</select></label>
+      <label>Format<select value={format} onChange={event=>setFormat(event.target.value)}><option value="all">All formats</option><option value="image">Image</option><option value="video">Video</option><option value="carousel">Carousel</option><option value="text">Text</option></select></label>
+      {period===0&&<><label>From (UTC)<input type="date" value={customFrom} max={customTo} onChange={event=>setCustomFrom(event.target.value)}/></label><label>To (UTC)<input type="date" value={customTo} min={customFrom} max={day(new Date())} onChange={event=>setCustomTo(event.target.value)}/></label></>}
+    </div>
+    {error&&<div className="results-message" role="status">{error}</div>}
+    {loading&&<div className="card pad sec">Loading verified analytics…</div>}
+    {results&&!loading&&<>
+      <div className="results-meta"><span>{results.fromDate} to {results.toDate} · {results.syncedPosts} synced · {results.pendingPosts} awaiting analytics</span><span>{results.lastSyncedAt?`Last checked ${dateLabel(results.lastSyncedAt)}`:'No analytics sync yet'}</span></div>
+      <div className="results-kpis">{kpis.map(([label,value,detail])=><div className="kpi" key={label}><span>{label}</span><b>{value}</b><small>{detail}</small></div>)}</div>
+      <p className="results-note">{results.note}</p>
+      {results.publishedPosts===0?<div className="card pad sec results-empty"><h3>No published BookLender posts in this period</h3><p>Choose a longer date range or wait for a scheduled post to publish.</p></div>:<>
+        <div className="results-grid"><section className="card pad sec"><h3>Publishing activity</h3><p className="small muted">Posts published by day or week. Dates are UTC.</p>{chart.length>0&&<BarChart data={chart} max={Math.max(1,...chart.map(item=>item.value))} step={Math.max(1,Math.ceil(Math.max(1,...chart.map(item=>item.value))/4))} label="BookLender posts published over time" all={chart.length<=7}/>}</section>
+          <section className="card pad sec"><h3>Performance by platform</h3><div className="results-group-list">{results.byPlatform.map(item=><div className="results-group" key={item.name}><b>{item.name}</b><span>{item.posts} posts</span><span>{number(item.reach)} reach</span><span>{number(item.engagement)} engagements</span></div>)}</div></section></div>
+        <div className="results-grid"><section className="card pad sec"><h3>Performance by format</h3><div className="results-group-list">{results.byFormat.map(item=><div className="results-group" key={item.name}><b>{item.name}</b><span>{item.posts} posts</span><span>{number(item.reach)} reach</span><span>{number(item.engagement)} engagements</span></div>)}</div></section>
+          <section className="card pad sec"><h3>Metric coverage</h3><p className="small muted">Networks report different metrics. A dash means Zernio did not supply that value.</p><div className="results-coverage">{(['reach','impressions','clicks','views','saves'] as const).map(key=><div key={key}><span>{key}</span><b>{results.metricCoverage[key]} / {results.publishedPosts} posts</b></div>)}</div></section></div>
+        <section className="card pad sec"><h3>Interaction breakdown</h3><div className="results-interactions">{(['likes','comments','shares','saves','views','clicks'] as const).map(key=><div key={key}><span>{key}</span><b>{number(results.totals[key])}</b><small>{results.metricCoverage[key]} posts reporting</small></div>)}</div></section>
+        <section className="card pad sec"><h3>Connected account followers</h3><p className="small muted">Account-wide follower counts include activity outside BookLender. Zernio refreshes these counts daily.</p>{results.followers.length ? <div className="results-followers">{results.followers.map(item=><div key={item.accountId}><b>{item.name}</b><span>{item.platform}</span><strong>{number(item.current)} followers</strong><small>{item.growth==null?'Growth unavailable':`${item.growth>=0?'+':''}${number(item.growth)} in selected period`}</small></div>)}</div> : <p className="muted">Follower data is not available yet.</p>}</section>
+        <section className="card pad sec"><h3>Top posts</h3><p className="small muted">Ranked by reported likes, comments, shares and saves.</p>{results.topPosts.length?<PostTable posts={results.topPosts} onOpen={openPost}/>:<p className="muted">Post analytics are still syncing.</p>}</section>
+        <section className="card pad sec"><h3>Recent published posts</h3><PostTable posts={results.recentPosts} onOpen={openPost}/></section>
+      </>}
+    </>}
+  </div>;
 }

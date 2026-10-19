@@ -5,6 +5,8 @@ export type Spend = StudioState['spend'];
 export type Sources = { sources: Record<Source, boolean>; ideaLimits?: Record<Source, number>; ideaBacklog?: Record<Source, number>; connections: Connection[]; events: Event[]; providers?: Record<string, SourceProvider>; newsProvider?: 'currents' | 'newsdata'; accounts?: StudioState['accounts'] };
 export type Brand = StudioState['brand'];
 export type Results = ResultMetrics;
+export type LiveResultPost = { id: number; publicationId: string; title: string; platform: string; accountId: string; format: string; publishedAt: string | null; scheduledAt: string; postUrl: string | null; status: string; engagement: number | null; dataAsOf: string | null; metrics: Record<'impressions'|'reach'|'likes'|'comments'|'shares'|'saves'|'clicks'|'views', number | null> };
+export type LiveResults = { scope: 'booklender'; fromDate: string; toDate: string; accounts: {id:string; name:string; platform:string}[]; publishedPosts: number; syncedPosts: number; pendingPosts: number; totals: LiveResultPost['metrics']; metricCoverage: Record<keyof LiveResultPost['metrics'], number>; engagement: number|null; engagementRate: number|null; daily: {date:string; posts:number; engagement:number}[]; byPlatform: {name:string; posts:number; engagement:number; reach:number; impressions:number}[]; byFormat: {name:string; posts:number; engagement:number; reach:number; impressions:number}[]; followers: {accountId:string; name:string; platform:string; current:number|null; growth:number|null; syncedAt:string}[]; topPosts: LiveResultPost[]; recentPosts: LiveResultPost[]; lastSyncedAt: string|null; note:string };
 export type CatalogueListItem = { id: string | null; source: 'manual' | 'imported'; isbn: string; title: string; author: string; format: string; archived: boolean };
 export type CatalogueBook = CatalogueListItem & { publisher: string; description: string; subjects: string[]; language: string; pages: number | string | null };
 export type Catalogue = { books: CatalogueListItem[]; search: string; nextCursor: string | null; hasMore: boolean; pageSize: number };
@@ -59,6 +61,12 @@ export const studioApi = {
     const result = await response.json();
     if (!response.ok) throw new Error(result.error || 'Could not load the calendar');
     return result;
+  },
+  async results(filters: {fromDate:string; toDate:string; platform:string; accountId:string; format:string}): Promise<LiveResults> {
+    const response = await fetch(`${base}/results?${new URLSearchParams(filters)}`, {cache:'no-store'});
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || 'Could not load Results');
+    return result as LiveResults;
   },
   async accountOptions<T>(accountId: string, detail: 'pinterest-boards' | 'tiktok-creator-info', mediaType?: 'video' | 'photo'): Promise<T> {
     const query = new URLSearchParams({ accountId, detail });

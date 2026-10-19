@@ -97,6 +97,14 @@ class Zernio:
     def post(self, post_id: str):
         return self.request("GET", f"/posts/{post_id}")
 
+    def post_analytics(self, post_id: str):
+        return self.request("GET", "/analytics", params={"postId": post_id}, timeout=10)
+
+    def follower_stats(self, account_ids: list[str], from_date: str, to_date: str):
+        return self.request("GET", "/accounts/follower-stats", timeout=20, params={
+            "accountIds": ",".join(account_ids), "fromDate": from_date, "toDate": to_date, "granularity": "daily",
+        })
+
     def cancel(self, post_id: str):
         try:
             return self.request("DELETE", f"/posts/{post_id}")

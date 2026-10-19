@@ -714,6 +714,11 @@ def get_setting_resource(
         return read_team(db, user)
     if resource == "posts":
         return read_posts(db)
+    if resource == "results":
+        if user.role != "admin" and "Results" not in (user.module_access or []):
+            raise HTTPException(403, "Results access required")
+        from app.analytics import read_results
+        return read_results(db, request.query_params)
     if resource == "catalogue":
         if user.role != "admin" and "Catalogue" not in (user.module_access or []):
             raise HTTPException(403, "Catalogue access required")
@@ -783,6 +788,14 @@ def post_setting_resource(
         return mutate_team(db, user, request, command)
     if resource == "posts":
         return mutate_post(db, user, request, command)
+    if resource == "results":
+        if user.role != "admin" and "Results" not in (user.module_access or []):
+            raise HTTPException(403, "Results access required")
+        if command.get("action") != "sync":
+            raise HTTPException(422, "Unknown Results command")
+        from app.worker import sync_zernio_analytics
+        sync_zernio_analytics.delay(force=True)
+        return {"message": "Analytics refresh queued"}
     if resource == "catalogue":
         require_permission(user, "catalogue.manage")
         return mutate_catalogue(db, user, request, command)
