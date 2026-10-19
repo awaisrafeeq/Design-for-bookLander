@@ -150,12 +150,14 @@ def read_results(db: Session, params):
                              func.coalesce(PublicationAnalytics.published_at, Publication.scheduled_at) >= datetime.combine(start, datetime.min.time(), UTC),
                              func.coalesce(PublicationAnalytics.published_at, Publication.scheduled_at) < datetime.combine(end + timedelta(days=1), datetime.min.time(), UTC))
                       .order_by(func.coalesce(PublicationAnalytics.published_at, Publication.scheduled_at).desc())).all()
-    daily = { (start + timedelta(days=offset)).isoformat(): {"date": (start + timedelta(days=offset)).isoformat(), "posts": 0, "engagement": 0}
+    daily = { (start + timedelta(days=offset)).isoformat(): {"date": (start + timedelta(days=offset)).isoformat(), "posts": 0, "syncedPosts": 0, "engagement": 0, "platforms": {}}
               for offset in range((end - start).days + 1) }
     totals = {key: 0 for key in METRIC_NAMES}
     available = {key: 0 for key in METRIC_NAMES}
-    groups = {"platform": defaultdict(lambda: {"posts": 0, "engagement": 0, "reach": 0, "impressions": 0}),
-              "format": defaultdict(lambda: {"posts": 0, "engagement": 0, "reach": 0, "impressions": 0})}
+    def empty_group():
+        return {"posts": 0, "syncedPosts": 0, "engagement": 0, "metricCoverage": {key: 0 for key in METRIC_NAMES},
+                **{key: 0 for key in METRIC_NAMES}}
+    groups = {"platform": defaultdict(empty_group), "format": defaultdict(empty_group)}
     posts = []
     for publication, post, snapshot in rows:
         post_format = str((post.payload or {}).get("format") or "unknown").lower()
@@ -165,12 +167,20 @@ def read_results(db: Session, params):
             continue
         if format_name != "all" and post_format != format_name:
             continue
-        metrics = snapshot.metrics if snapshot and snapshot.sync_status == "synced" else {}
+        is_synced = bool(snapshot and snapshot.sync_status == "synced")
+        metrics = snapshot.metrics if is_synced else {}
         engagement = sum(metrics.get(key) or 0 for key in ("likes", "comments", "shares", "saves"))
         published_date = (snapshot.published_at if snapshot and snapshot.published_at else publication.scheduled_at).astimezone(UTC).date().isoformat()
         if published_date in daily:
-            daily[published_date]["posts"] += 1
-            daily[published_date]["engagement"] += engagement
+            entry = daily[published_date]
+            entry["posts"] += 1
+            platform_day = entry["platforms"].setdefault(publication.platform, {"posts": 0, "syncedPosts": 0, "engagement": 0})
+            platform_day["posts"] += 1
+            if is_synced:
+                entry["syncedPosts"] += 1
+                entry["engagement"] += engagement
+                platform_day["syncedPosts"] += 1
+                platform_day["engagement"] += engagement
         for key in METRIC_NAMES:
             if isinstance(metrics.get(key), (int, float)):
                 totals[key] += metrics[key]
@@ -178,9 +188,13 @@ def read_results(db: Session, params):
         for dimension, group_key in (("platform", publication.platform), ("format", post_format)):
             group = groups[dimension][group_key]
             group["posts"] += 1
-            group["engagement"] += engagement
-            group["reach"] += metrics.get("reach") or 0
-            group["impressions"] += metrics.get("impressions") or 0
+            if is_synced:
+                group["syncedPosts"] += 1
+                group["engagement"] += engagement
+            for metric in METRIC_NAMES:
+                if isinstance(metrics.get(metric), (int, float)):
+                    group[metric] += metrics[metric]
+                    group["metricCoverage"][metric] += 1
         posts.append({"id": post.id, "publicationId": str(publication.id), "title": post.payload.get("title") or "Untitled post",
                       "platform": publication.platform, "accountId": publication.account_id, "format": post_format,
                       "publishedAt": snapshot.published_at.isoformat() if snapshot and snapshot.published_at else None,
@@ -191,8 +205,19 @@ def read_results(db: Session, params):
     reach = totals["reach"] if available["reach"] else None
     engagement_total = sum(totals[key] for key in ("likes", "comments", "shares", "saves")) if synced else None
     rate = round(engagement_total / reach * 100, 2) if reach and engagement_total is not None else None
-    by_platform = [{"name": key, **value} for key, value in sorted(groups["platform"].items())]
-    by_format = [{"name": key, **value} for key, value in sorted(groups["format"].items())]
+    def serialize_groups(dimension):
+        values = []
+        for key, value in sorted(groups[dimension].items()):
+            item = {"name": key, **value}
+            for metric in METRIC_NAMES:
+                if not value["metricCoverage"][metric]:
+                    item[metric] = None
+            metric_reach = item["reach"]
+            item["engagementRate"] = round(value["engagement"] / metric_reach * 100, 2) if metric_reach and value["metricCoverage"]["reach"] else None
+            values.append(item)
+        return values
+    by_platform = serialize_groups("platform")
+    by_format = serialize_groups("format")
     followers = []
     account_by_id = {account.id: account for account in accounts}
     follower_rows = db.scalars(select(AccountFollowerAnalytics).where(
