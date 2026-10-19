@@ -21,7 +21,7 @@ from app.workflow import generation_command, connections_dto, schedule_command, 
 from app.providers import Zernio
 from app.publishing import PLATFORMS
 from app.source_feeds import configured_providers, source_events, source_feed_status
-from app.catalogue_admin import read_catalogue, mutate_catalogue
+from app.catalogue_admin import read_catalogue, read_catalogue_detail, mutate_catalogue
 
 router = APIRouter(prefix="/studio", tags=["studio settings"])
 
@@ -661,7 +661,14 @@ def get_setting_resource(
     if resource == "catalogue":
         if user.role != "admin" and "Catalogue" not in (user.module_access or []):
             raise HTTPException(403, "Catalogue access required")
-        return read_catalogue(db, request.query_params.get("search", ""))
+        params = request.query_params
+        if params.get("detail"):
+            return read_catalogue_detail(db, params["detail"], params.get("id", ""))
+        try:
+            page_size = int(params.get("pageSize", "25"))
+        except ValueError:
+            raise HTTPException(422, "Invalid page size") from None
+        return read_catalogue(db, params.get("search", ""), params.get("cursor", ""), page_size)
     if resource == "sources":
         detail = request.query_params.get("detail")
         if detail:

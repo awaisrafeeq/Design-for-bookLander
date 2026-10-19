@@ -1,4 +1,7 @@
 """Staff catalogue search and individual manual book maintenance."""
+import base64
+import binascii
+import json
 import re
 from uuid import UUID
 
@@ -58,59 +61,107 @@ def _manual_dto(book: ManualCatalogueBook) -> dict:
             "pages": book.pages, "archived": book.archived}
 
 
-_IMPORTED_SEARCH = text(r"""
-    SELECT c001, c003, c006, c012, c015, c023, c025, c030, c037, c046
-    FROM (
-      SELECT DISTINCT ON (c001) c001, c003, c006, c012, c015, c023, c025, c030, c037, c046, score
-      FROM (
-        SELECT c001, c003, c006, c012, c015, c023, c025, c030, c037, c046,
-               CASE WHEN c001 = :isbn THEN 1000
-                    ELSE ts_rank_cd(to_tsvector('simple'::regconfig, COALESCE(c003, '') || ' ' || COALESCE(c006, '')),
-                                    to_tsquery('simple'::regconfig, :query)) END AS score
-        FROM public.books
-        WHERE c001 = :isbn OR (
-            :query <> '' AND
-            to_tsvector('simple'::regconfig, COALESCE(c003, '') || ' ' || COALESCE(c006, ''))
-            @@ to_tsquery('simple'::regconfig, :query)
-        )
-        ORDER BY score DESC, c003
-        LIMIT 100
-      ) ranked
-      ORDER BY c001, score DESC
-    ) unique_matches
-    ORDER BY score DESC, c003
-    LIMIT 40
-""")
+def _cursor_value(cursor: str, search: str, page_size: int) -> tuple[str, str] | None:
+    if not cursor:
+        return None
+    try:
+        if len(cursor) > 8000:
+            raise ValueError
+        data = json.loads(base64.urlsafe_b64decode(cursor + "=" * (-len(cursor) % 4)))
+        if (not isinstance(data, dict) or data.get("search") != search
+                or data.get("pageSize") != page_size
+                or not isinstance(data.get("title"), str)
+                or not isinstance(data.get("isbn"), str)
+                or len(data["title"]) > 500 or len(data["isbn"]) > 80):
+            raise ValueError
+        return data["title"], data["isbn"]
+    except (ValueError, TypeError, UnicodeDecodeError, binascii.Error):
+        raise HTTPException(422, "Invalid catalogue page cursor") from None
 
 
-def read_catalogue(db: Session, search: str) -> dict:
+def _encode_cursor(row: dict, search: str, page_size: int) -> str:
+    value = {"title": row["sort_title"], "isbn": row["isbn"],
+             "search": search, "pageSize": page_size}
+    return base64.urlsafe_b64encode(json.dumps(value).encode()).decode().rstrip("=")
+
+
+def read_catalogue(db: Session, search: str, cursor: str = "", page_size: int = 25) -> dict:
     search = _clean(search, 120)
-    tokens = re.findall(r"[\w]+", search.casefold())[:8]
-    ts_query = " & ".join(f"{token}:*" for token in tokens if len(token) > 1)
+    if page_size not in (25, 50):
+        raise HTTPException(422, "Page size must be 25 or 50")
+    after = _cursor_value(cursor, search, page_size)
+    tokens = re.findall(r"\w+", search.casefold())[:8]
+    ts_query = " & ".join(f"{token}:*" for token in tokens)
     isbn = re.sub(r"[\s-]", "", search).upper()
+    isbn_search = bool(search and re.fullmatch(r"[0-9Xx\s-]+", search))
+    params = {"isbn": isbn, "query": ts_query, "limit": page_size + 1,
+              "after_title": after[0] if after else "", "after_isbn": after[1] if after else ""}
+    imported_where = ""
+    manual_where = ""
     if search:
-        manual_query = select(ManualCatalogueBook).where(
-            (ManualCatalogueBook.isbn == isbn) |
-            text("to_tsvector('simple'::regconfig, title || ' ' || author) @@ to_tsquery('simple'::regconfig, :query)").bindparams(query=ts_query or "unlikelycataloguetoken")
-        ).order_by(ManualCatalogueBook.archived, ManualCatalogueBook.title).limit(40)
-    else:
-        manual_query = select(ManualCatalogueBook).order_by(ManualCatalogueBook.updated_at.desc()).limit(40)
-    manual = [_manual_dto(book) for book in db.scalars(manual_query)]
-    imported = []
-    if search:
-        for row in db.execute(_IMPORTED_SEARCH, {"isbn": isbn, "query": ts_query}).mappings():
-            imported.append({
-                "id": None, "source": "imported", "isbn": row["c001"] or "",
-                "title": row["c003"] or "", "author": row["c006"] or "",
-                "format": row["c015"] or "", "publisher": row["c012"] or "",
-                "description": (row["c046"] or "")[:1000],
-                "subjects": [value for value in (row["c023"], row["c025"]) if value and value != r"\N"],
-                "language": row["c037"] or "", "pages": row["c030"] or None,
-                "archived": False,
-            })
-    seen = {book["isbn"] for book in manual if not book["archived"]}
-    return {"books": (manual + [book for book in imported if book["isbn"] not in seen])[:50],
-            "search": search}
+        if isbn_search:
+            imported_where = "AND c001 = :isbn"
+            manual_where = "AND isbn = :isbn"
+        elif ts_query:
+            imported_where = "AND to_tsvector('simple'::regconfig, COALESCE(c003, '') || ' ' || COALESCE(c006, '')) @@ to_tsquery('simple'::regconfig, :query)"
+            manual_where = "AND to_tsvector('simple'::regconfig, title || ' ' || author) @@ to_tsquery('simple'::regconfig, :query)"
+        else:
+            return {"books": [], "search": search, "nextCursor": None,
+                    "hasMore": False, "pageSize": page_size}
+    if after:
+        imported_where += ' AND (left(lower(c003), 500) COLLATE "C", c001 COLLATE "C") > (:after_title, :after_isbn)'
+        manual_where += ' AND (left(lower(title), 500) COLLATE "C", isbn COLLATE "C") > (:after_title, :after_isbn)'
+    # Keep the list narrow; descriptions and other large fields are fetched on row open.
+    listing = text(f"""
+        SELECT id, source, isbn, title, author, format, archived, sort_title FROM (
+          SELECT NULL::text AS id, 'imported' AS source, c001 AS isbn,
+                 c003 AS title, c006 AS author, c015 AS format,
+                 false AS archived, left(lower(c003), 500) COLLATE "C" AS sort_title
+          FROM public.books WHERE true {imported_where}
+          UNION ALL
+          SELECT id::text, 'manual', isbn, title, author, format,
+                 archived, left(lower(title), 500) COLLATE "C"
+          FROM manual_catalogue_books WHERE true {manual_where}
+        ) books
+        ORDER BY sort_title, isbn COLLATE "C"
+        LIMIT :limit
+    """)
+    rows = [dict(row) for row in db.execute(listing, params).mappings()]
+    has_more = len(rows) > page_size
+    page = rows[:page_size]
+    next_cursor = _encode_cursor(page[-1], search, page_size) if has_more else None
+    for row in page:
+        row.pop("sort_title")
+    return {"books": page, "search": search, "nextCursor": next_cursor,
+            "hasMore": has_more, "pageSize": page_size}
+
+
+def read_catalogue_detail(db: Session, source: str, identifier: str) -> dict:
+    if source == "manual":
+        try:
+            book_id = UUID(identifier)
+        except (TypeError, ValueError):
+            raise HTTPException(422, "Invalid book ID") from None
+        book = db.get(ManualCatalogueBook, book_id)
+        if book is None:
+            raise HTTPException(404, "Book not found")
+        return _manual_dto(book)
+    if source != "imported":
+        raise HTTPException(422, "Invalid catalogue source")
+    isbn = _clean(identifier, 80)
+    row = db.execute(text("""
+        SELECT c001, c003, c006, c012, c015, c023, c025, c030, c037, c046
+        FROM public.books WHERE c001 = :isbn LIMIT 1
+    """), {"isbn": isbn}).mappings().first()
+    if row is None:
+        raise HTTPException(404, "Book not found")
+    return {"id": None, "source": "imported", "isbn": row["c001"] or "",
+            "title": row["c003"] or "", "author": row["c006"] or "",
+            "format": row["c015"] or "", "publisher": row["c012"] or "",
+            "description": (row["c046"] or "")[:10000],
+            "subjects": [value for value in (row["c023"], row["c025"]) if value and value != r"\N"],
+            "language": row["c037"] or "", "pages": row["c030"] or None,
+            "archived": False}
 
 
 def _ensure_unique(db: Session, isbn: str, ignore_id: UUID | None = None) -> None:
