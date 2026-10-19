@@ -34,6 +34,19 @@ _BOOK_LOOKUP = text(r"""
     LIMIT 3
 """)
 
+_MANUAL_LOOKUP = text("""
+    SELECT isbn, title, author, publisher, format, description, subjects, pages, language
+    FROM manual_catalogue_books
+    WHERE archived = false
+      AND to_tsvector('simple'::regconfig, title)
+          @@ to_tsquery('simple'::regconfig, :query)
+    ORDER BY (LOWER(BTRIM(title)) = :normalized) DESC,
+             (POSITION(:phrase IN LOWER(title)) > 0) DESC,
+             ts_rank_cd(to_tsvector('simple'::regconfig, title),
+                        to_tsquery('simple'::regconfig, :query)) DESC
+    LIMIT 1
+""")
+
 
 def _clean(value):
     value = str(value or "").strip()
@@ -52,11 +65,22 @@ def find_catalogue_book(db: Session, topic: str) -> dict | None:
     # One indexed GIN full-text query replaces repeated wildcard scans.
     phrase = " ".join(words)
     query = " | ".join(words)
-    best = db.execute(_BOOK_LOOKUP, {
+    params = {
         "query": query,
         "phrase": phrase,
         "normalized": phrase,
-    }).mappings().first()
+    }
+    manual = db.execute(_MANUAL_LOOKUP, params).mappings().first()
+    best = db.execute(_BOOK_LOOKUP, params).mappings().first()
+    if manual and (not best or phrase in manual["title"].casefold()):
+        return {
+            "isbn": manual["isbn"], "title": manual["title"],
+            "author": manual["author"], "publisher": manual["publisher"] or "",
+            "format": manual["format"], "description": (manual["description"] or "")[:600],
+            "subjects": manual["subjects"] or [], "pages": str(manual["pages"] or ""),
+            "language": manual["language"] or "", "subjectCodes": [],
+            "source": "BookLender catalogue",
+        }
     if not best:
         return None
     return {

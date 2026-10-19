@@ -21,6 +21,7 @@ from app.workflow import generation_command, connections_dto, schedule_command, 
 from app.providers import Zernio
 from app.publishing import PLATFORMS
 from app.source_feeds import configured_providers, source_events, source_feed_status
+from app.catalogue_admin import read_catalogue, mutate_catalogue
 
 router = APIRouter(prefix="/studio", tags=["studio settings"])
 
@@ -48,12 +49,12 @@ ROLE_TO_API = {
     "viewer": "viewer",
 }
 ROLE_TO_LABEL = {value: key for key, value in ROLE_TO_API.items() if key[0].isupper()}
-MODULES = ["Board", "Ideas", "Review", "Schedule", "Results", "Sources", "Brand", "AI spend", "Team", "Logs"]
+MODULES = ["Board", "Ideas", "Review", "Schedule", "Results", "Sources", "Catalogue", "Brand", "AI spend", "Team", "Logs"]
 ROLE_MODULES = {
     "admin": MODULES,
-    "campaigns_manager": ["Board", "Ideas", "Review", "Schedule", "Results", "Sources", "Brand", "AI spend", "Logs"],
+    "campaigns_manager": ["Board", "Ideas", "Review", "Schedule", "Results", "Sources", "Catalogue", "Brand", "AI spend", "Logs"],
     "approver": ["Board", "Ideas", "Review", "Schedule", "Results", "Logs"],
-    "editor": ["Board", "Ideas", "Schedule", "Sources", "Brand", "Logs"],
+    "editor": ["Board", "Ideas", "Schedule", "Sources", "Catalogue", "Brand", "Logs"],
     "viewer": ["Board", "Schedule", "Results"],
 }
 
@@ -657,6 +658,10 @@ def get_setting_resource(
         return read_team(db, user)
     if resource == "posts":
         return read_posts(db)
+    if resource == "catalogue":
+        if user.role != "admin" and "Catalogue" not in (user.module_access or []):
+            raise HTTPException(403, "Catalogue access required")
+        return read_catalogue(db, request.query_params.get("search", ""))
     if resource == "sources":
         detail = request.query_params.get("detail")
         if detail:
@@ -711,6 +716,9 @@ def post_setting_resource(
         return mutate_team(db, user, request, command)
     if resource == "posts":
         return mutate_post(db, user, request, command)
+    if resource == "catalogue":
+        require_permission(user, "catalogue.manage")
+        return mutate_catalogue(db, user, request, command)
     if resource == "sources":
         return mutate_sources(db, user, request, command)
     if resource == "schedule":

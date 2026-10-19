@@ -32,4 +32,18 @@ button.srcc:hover{border-color:color-mix(in srgb,var(--ink) 28%,var(--line))}
 .mx button svg.i{width:15px;height:15px;stroke-width:2.5}
 .mx button.on{background:var(--ok);color:var(--surf);box-shadow:none}
 .mx button[disabled]{cursor:default;opacity:.65}
+.catalogue-search{max-width:560px;display:flex;flex-direction:column;gap:6px}
+.catalogue-search label,.catalogue-form label{font-weight:600}
+.catalogue-sub{display:block;font-weight:400;margin-top:2px}
+.catalogue-table td:first-child{min-width:260px}
+.catalogue-actions{display:flex;gap:6px;white-space:nowrap}
+.catalogue-overlay{position:fixed;inset:0;z-index:80;background:var(--scrim);display:grid;place-items:center;padding:20px}
+.catalogue-dialog{width:min(100%,690px);max-height:min(90vh,850px);overflow:auto;padding:22px}
+.catalogue-dialog-head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:18px}
+.catalogue-dialog-head h2{font-size:23px}
+.catalogue-form{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+.catalogue-form label{display:flex;flex-direction:column;gap:5px;font-size:13px}
+.catalogue-form .wide{grid-column:1/-1}
+.catalogue-footer{display:flex;justify-content:flex-end;gap:8px;border-top:1px solid var(--line);padding-top:16px}
+@media(max-width:600px){.catalogue-form{grid-template-columns:1fr}.catalogue-dialog{padding:16px}.catalogue-form .wide{grid-column:auto}}
 

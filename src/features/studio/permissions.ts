@@ -6,4 +6,5 @@ export const actionPermissions: Record<string, string> = {
   'publish.send': 'Send approved posts to Zernio', 'brand.edit': 'Change brand rules',
   'spend.edit': 'Change AI budget', 'sources.manage': 'Manage connections',
   'jobs.retry': 'Retry background jobs', 'logs.view': 'View logs',
+  'catalogue.manage': 'Manage catalogue books',
 };

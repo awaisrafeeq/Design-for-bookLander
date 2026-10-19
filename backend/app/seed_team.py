@@ -11,7 +11,7 @@ CLIENT_USERS = [
     ("krishna@booklender.com", "Krishna", "campaigns_manager", True, ["Content Manager", "Campaigns Manager"]),
     ("ronnie@utsolutionsinc.com", "Ronnie", "campaigns_manager", False, ["Campaigns Manager"]),
 ]
-MODULES = ["Board", "Ideas", "Review", "Schedule", "Results", "Sources", "Brand", "AI spend", "Team", "Logs"]
+MODULES = ["Board", "Ideas", "Review", "Schedule", "Results", "Sources", "Catalogue", "Brand", "AI spend", "Team", "Logs"]
 
 
 def seed():

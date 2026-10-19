@@ -176,6 +176,27 @@ class SourceSyncRun(Base):
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
+class ManualCatalogueBook(Base):
+    __tablename__ = "manual_catalogue_books"
+    __table_args__ = (UniqueConstraint("isbn", name="uq_manual_catalogue_books_isbn"),)
+
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    isbn: Mapped[str] = mapped_column(String(13), nullable=False)
+    title: Mapped[str] = mapped_column(String(500), nullable=False)
+    author: Mapped[str] = mapped_column(String(300), nullable=False)
+    format: Mapped[str] = mapped_column(String(80), nullable=False)
+    publisher: Mapped[str | None] = mapped_column(String(300))
+    description: Mapped[str | None] = mapped_column(Text)
+    subjects: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    language: Mapped[str | None] = mapped_column(String(80))
+    pages: Mapped[int | None] = mapped_column(Integer)
+    archived: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    created_by: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"))
+    updated_by: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+
+
 class WorkJob(Base):
     __tablename__ = "work_jobs"
     id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)

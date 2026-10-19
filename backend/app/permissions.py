@@ -10,17 +10,18 @@ PERMISSIONS = {
     "publish.send": "Send approved posts to Zernio", "brand.edit": "Change brand rules",
     "spend.edit": "Change AI budget", "sources.manage": "Manage connections",
     "jobs.retry": "Retry background jobs", "logs.view": "View logs",
+    "catalogue.manage": "Manage catalogue books",
 }
 DEFAULTS = {
     "admin": set(PERMISSIONS),
-    "campaigns_manager": {"ideas.create", "ideas.pick", "content.edit", "content.archive"},
-    "editor": {"ideas.create", "content.edit", "media.upload"},
+    "campaigns_manager": {"ideas.create", "ideas.pick", "content.edit", "content.archive", "catalogue.manage"},
+    "editor": {"ideas.create", "content.edit", "media.upload", "catalogue.manage"},
     "approver": {"review.approve"}, "viewer": set(),
 }
 ACTION_MODULE = {
     "ideas": "Ideas", "content": "Board", "media": "Board", "review": "Review",
     "schedule": "Schedule", "publish": "Schedule", "brand": "Brand", "spend": "AI spend",
-    "sources": "Sources", "jobs": "Logs", "logs": "Logs",
+    "sources": "Sources", "jobs": "Logs", "logs": "Logs", "catalogue": "Catalogue",
 }
 
 

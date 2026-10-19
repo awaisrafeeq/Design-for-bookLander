@@ -19,10 +19,10 @@ from app.permissions import effective_permissions
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 ROLE_MODULES = {
-    "admin": ["Board", "Ideas", "Review", "Schedule", "Results", "Sources", "Brand", "AI spend", "Team", "Logs"],
-    "campaigns_manager": ["Board", "Ideas", "Review", "Schedule", "Results", "Sources", "Brand", "AI spend", "Logs"],
+    "admin": ["Board", "Ideas", "Review", "Schedule", "Results", "Sources", "Catalogue", "Brand", "AI spend", "Team", "Logs"],
+    "campaigns_manager": ["Board", "Ideas", "Review", "Schedule", "Results", "Sources", "Catalogue", "Brand", "AI spend", "Logs"],
     "approver": ["Board", "Ideas", "Review", "Schedule", "Results", "Logs"],
-    "editor": ["Board", "Ideas", "Schedule", "Sources", "Brand", "Logs"],
+    "editor": ["Board", "Ideas", "Schedule", "Sources", "Catalogue", "Brand", "Logs"],
     "viewer": ["Board", "Schedule", "Results"],
 }
 DUMMY_PASSWORD_HASH = password_hasher.hash(secrets.token_urlsafe(32))
