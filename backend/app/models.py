@@ -77,6 +77,8 @@ class BrandPolicyVersion(Base):
     version: Mapped[int] = mapped_column(Integer, nullable=False)
     voice: Mapped[str] = mapped_column(Text, nullable=False)
     format_guidance: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    reference_post_id: Mapped[int | None] = mapped_column(Integer)
+    reference_note: Mapped[str] = mapped_column(Text, nullable=False, default="")
     active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     created_by: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
@@ -139,6 +141,7 @@ class SourceSetting(Base):
     key: Mapped[str] = mapped_column(String(40), primary_key=True)
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     provider: Mapped[str | None] = mapped_column(String(40))
+    idea_limit: Mapped[int] = mapped_column(Integer, nullable=False, default=5)
     updated_by: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"))
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
 
@@ -220,7 +223,7 @@ class WorkJob(Base):
 class MediaAsset(Base):
     __tablename__ = "media_assets"
     id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
-    post_id: Mapped[int] = mapped_column(ForeignKey("studio_posts.id", ondelete="CASCADE"), index=True)
+    post_id: Mapped[int | None] = mapped_column(ForeignKey("studio_posts.id", ondelete="CASCADE"), index=True)
     kind: Mapped[str] = mapped_column(String(10))
     mime: Mapped[str] = mapped_column(String(80))
     filename: Mapped[str] = mapped_column(String(100))

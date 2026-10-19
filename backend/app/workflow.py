@@ -23,11 +23,17 @@ def generation_command(db, user, command):
     policy = brand_snapshot(db)
     if action == "suggest":
         topics = db.scalars(select(StudioPost).where(StudioPost.stage == "idea").order_by(StudioPost.created_at.desc()).with_for_update()).all()
+        setting_rows = {row.key: row for row in db.scalars(select(SourceSetting)).all()}
+        limits = {key: setting_rows[key].idea_limit if key in setting_rows else 5
+                  for key in ("calendar", "news", "books", "team")}
+        backlog = {key: sum(1 for post in topics if post.payload.get("source") == key)
+                   for key in limits}
+        available = {key for key in limits if backlog[key] < limits[key]}
         candidates = [{"id": f"team:{post.id}", "title": post.payload["title"],
                        "summary": post.payload.get("note", ""), "source": "team", "sourceLabel": "Team topic"}
-                      for post in topics if post.payload.get("human")][:15]
+                      for post in topics if post.payload.get("human") and "team" in available][:15]
         source_settings = {row.key: row.enabled for row in db.scalars(select(SourceSetting)).all()}
-        enabled_categories = [key for key in ("calendar", "news", "books") if source_settings.get(key)]
+        enabled_categories = [key for key in ("calendar", "news", "books") if source_settings.get(key) and key in available]
         news_setting = db.get(SourceSetting, "news")
         news_provider = (news_setting.provider if news_setting else None) or settings.news_source_provider
         if enabled_categories:
@@ -60,8 +66,9 @@ def generation_command(db, user, command):
                 "publishedAt": item.published_at.isoformat() if item.published_at else None,
                 "metadata": item.metadata_json or {}} for item in feed_items)
         if not candidates:
-            raise HTTPException(422, "Enable a configured source and sync it, or add a team topic before suggesting ideas.")
-        queue(db, "suggest", "OpenRouter", user.id, payload={"topics": candidates[:35], "brand": policy})
+            raise HTTPException(422, "No source has room for new ideas. Pick, close or archive ideas, raise a source limit, or enable another feed.")
+        queue(db, "suggest", "OpenRouter", user.id, payload={"topics": candidates[:35], "brand": policy,
+                                                        "ideaLimits": limits})
     else:
         query = select(StudioPost).with_for_update()
         if action == "generate-all":
@@ -135,7 +142,7 @@ def generation_command(db, user, command):
                         "Do not imitate or invent an exact book cover. Use an uploaded approved cover only if one is provided.",
                     ))
                 queue(db, "media", provider, user.id, post.id,
-                      {"brief": brief, "brand": policy, "previousStage": post.stage, **({"duration": duration, "voiceover": voiceover} if provider == "Creatify" else {})})
+                      {"brief": brief, "brand": policy, "previousStage": post.stage, **({"duration": duration, "voiceover": voiceover, "voiceAccent": post.payload.get("voiceAccent") or settings.creatify_tts_accent} if provider == "Creatify" else {})})
             else:
                 if post.stage not in ({"review", "selected"} if action == "revise" else {"selected"}):
                     raise HTTPException(409, "Pick an idea before generation, or revise a post in Review.")

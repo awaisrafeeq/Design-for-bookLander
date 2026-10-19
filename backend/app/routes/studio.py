@@ -18,7 +18,7 @@ from app.jobs import ACTIVE, job_dto, save_checks, snapshot_post, editable_stage
 from app.models import WorkJob, Publication
 from app.permissions import PERMISSIONS, effective_permissions, require_permission
 from app.workflow import generation_command, connections_dto, schedule_command, sync_accounts, accounts_dto
-from app.providers import Zernio
+from app.providers import Zernio, creatify_voices
 from app.publishing import PLATFORMS
 from app.source_feeds import configured_providers, source_events, source_feed_status
 from app.catalogue_admin import read_catalogue, read_catalogue_detail, mutate_catalogue
@@ -84,6 +84,8 @@ def active_brand(db: Session, *, lock: bool = False) -> BrandPolicyVersion:
 
 def read_brand(db: Session) -> dict:
     policy = active_brand(db)
+    published = db.scalars(select(StudioPost).where(StudioPost.stage == "published")
+                           .order_by(StudioPost.updated_at.desc()).limit(100)).all()
     rules = db.scalars(select(BrandRule).where(BrandRule.policy_version_id == policy.id).order_by(BrandRule.created_at, BrandRule.id)).all()
     guidance = policy.format_guidance or {}
     return {
@@ -93,7 +95,9 @@ def read_brand(db: Session) -> dict:
             {"format": key, "name": guidance.get(key, {}).get("name", key.title()), "guidance": guidance.get(key, {}).get("guidance", "")}
             for key in ("video", "carousel", "image")
         ],
-        "reference": {"postId": 0, "note": ""},
+        "reference": {"postId": policy.reference_post_id or 0, "note": policy.reference_note or ""},
+        "referencePosts": [{"id": post.id, "title": post.payload.get("title", "Untitled")}
+                           for post in published],
         "version": policy.version,
     }
 
@@ -105,6 +109,8 @@ def mutate_brand(db: Session, user: User, request: Request, command: dict) -> di
     voice = policy.voice
     guidance = dict(policy.format_guidance or {})
     rule_values = [item.rule for item in old_rules]
+    reference_post_id = policy.reference_post_id
+    reference_note = policy.reference_note or ""
     action = command.get("action")
     key = command.get("key")
     value = command.get("value")
@@ -132,11 +138,26 @@ def mutate_brand(db: Session, user: User, request: Request, command: dict) -> di
             rule_values.pop(index)
         except (TypeError, ValueError, IndexError):
             raise HTTPException(status_code=404, detail="Brand rule not found") from None
+    elif action == "reference":
+        raw_id = command.get("postId")
+        try:
+            reference_post_id = int(raw_id) if raw_id else None
+        except (TypeError, ValueError):
+            raise HTTPException(422, "Choose a published post") from None
+        reference_note = str(command.get("note") or "").strip()
+        if len(reference_note) > 1000:
+            raise HTTPException(422, "Reference guidance must be 1,000 characters or fewer")
+        if reference_post_id and not db.scalar(select(StudioPost.id).where(StudioPost.id == reference_post_id, StudioPost.stage == "published")):
+            raise HTTPException(422, "Choose a published post")
+        if not reference_post_id:
+            reference_note = ""
     else:
         raise HTTPException(status_code=422, detail="Unknown brand setting")
 
     db.query(BrandPolicyVersion).filter(BrandPolicyVersion.active.is_(True)).update({"active": False}, synchronize_session=False)
-    updated = BrandPolicyVersion(version=policy.version + 1, voice=voice, format_guidance=guidance, active=True, created_by=user.id)
+    updated = BrandPolicyVersion(version=policy.version + 1, voice=voice, format_guidance=guidance,
+                                 reference_post_id=reference_post_id, reference_note=reference_note,
+                                 active=True, created_by=user.id)
     db.add(updated)
     db.flush()
     db.add_all([BrandRule(policy_version_id=updated.id, rule=rule) for rule in rule_values])
@@ -255,10 +276,16 @@ def read_posts(db: Session) -> list[dict]:
 
 def read_sources(db: Session) -> dict:
     defaults = {"calendar": False, "news": False, "books": False, "team": True}
+    limits = {key: 5 for key in defaults}
     rows = db.scalars(select(SourceSetting)).all()
-    for row in rows: defaults[row.key] = row.enabled
+    for row in rows:
+        defaults[row.key] = row.enabled
+        limits[row.key] = row.idea_limit
+    backlog = {key: db.scalar(select(func.count(StudioPost.id)).where(
+        StudioPost.stage == "idea", StudioPost.payload["source"].as_string() == key)) or 0 for key in defaults}
     providers, news_provider = source_feed_status(db)
-    return {"sources": defaults, "connections": connections_dto(db), "events": source_events(db),
+    return {"sources": defaults, "ideaLimits": limits, "ideaBacklog": backlog,
+            "connections": connections_dto(db), "events": source_events(db),
             "accounts": accounts_dto(db), "providers": providers, "newsProvider": news_provider}
 
 
@@ -279,6 +306,21 @@ def read_logs(db: Session) -> list[dict]:
 
 def mutate_sources(db: Session, user: User, request: Request, command: dict) -> dict:
     require_permission(user, "sources.manage")
+    if command.get("action") == "idea-limit":
+        key = command.get("key")
+        value = command.get("value")
+        if key not in {"calendar", "news", "books", "team"} or type(value) is not int or not 0 <= value <= 50:
+            raise HTTPException(422, "Choose a source and an idea limit from 0 to 50")
+        setting = db.get(SourceSetting, key)
+        if setting is None:
+            setting = SourceSetting(key=key, enabled=key == "team", idea_limit=value, updated_by=user.id)
+            db.add(setting)
+        else:
+            setting.idea_limit = value
+            setting.updated_by = user.id
+        audit(db, user, request, "source.idea_limit_updated", "source_setting", key, {"limit": value})
+        db.commit()
+        return {"message": "Idea backlog limit saved"}
     if command.get("action") == "sync-accounts":
         sync_accounts(db)
         audit(db, user, request, "provider.accounts_synced", "zernio", "accounts", {})
@@ -371,6 +413,15 @@ def mutate_post(db: Session, user: User, request: Request, command: dict) -> dic
         if not isinstance(note, str) or len(note.strip()) > 1000:
             raise HTTPException(422, "Optional input must be 1,000 characters or fewer")
         payload = {**POST_DEFAULTS, "title": title, "note": note.strip()}
+        chosen_format = command.get("format", "image")
+        chosen_platform = command.get("platform", "Instagram")
+        if chosen_format not in {"image", "carousel", "video"} or chosen_platform not in PLATFORMS:
+            raise HTTPException(422, "Choose a valid media type and platform")
+        if chosen_platform == "YouTube" and chosen_format != "video":
+            raise HTTPException(422, "YouTube requires a video post")
+        if chosen_platform == "Pinterest" and chosen_format == "carousel":
+            raise HTTPException(422, "Pinterest accepts one image or video per pin")
+        payload.update({"format": chosen_format, "platform": chosen_platform, "platforms": [chosen_platform]})
         post = StudioPost(stage="idea", version=1, payload=payload, version_history=[], created_by=user.id, updated_by=user.id)
         db.add(post)
         db.flush()
@@ -485,7 +536,7 @@ def mutate_post(db: Session, user: User, request: Request, command: dict) -> dic
     elif action == "update":
         if post.stage not in {"selected", "review"}:
             raise HTTPException(status_code=409, detail="Drafts can only be edited after picking an idea")
-        changed = {key: command[key].strip() for key in ("caption", "tags", "script", "mediaBrief", "videoDirection", "note") if isinstance(command.get(key), str)}
+        changed = {key: command[key].strip() for key in ("caption", "tags", "script", "mediaBrief", "videoDirection", "note", "voiceAccent") if isinstance(command.get(key), str)}
         if not changed:
             raise HTTPException(status_code=422, detail="Add a caption or tags before saving")
         if "caption" in changed and (not changed["caption"] or len(changed["caption"]) > 5000):
@@ -496,6 +547,11 @@ def mutate_post(db: Session, user: User, request: Request, command: dict) -> dic
             raise HTTPException(422, "Script and media directions must be 5,000 characters or fewer")
         if len(changed.get("note", "")) > 1000:
             raise HTTPException(422, "Idea input must be 1,000 characters or fewer")
+        if changed.get("voiceAccent"):
+            try:
+                UUID(changed["voiceAccent"])
+            except ValueError:
+                raise HTTPException(422, "Choose a valid Creatify voice") from None
         snapshot_post(post, "Content edited")
         post.version += 1
         post.approved_version = None
@@ -669,6 +725,10 @@ def get_setting_resource(
         except ValueError:
             raise HTTPException(422, "Invalid page size") from None
         return read_catalogue(db, params.get("search", ""), params.get("cursor", ""), page_size)
+    if resource == "voices":
+        if user.role != "admin" and "Board" not in (user.module_access or []):
+            raise HTTPException(403, "Board access required")
+        return {"voices": creatify_voices(), "defaultAccent": settings.creatify_tts_accent or ""}
     if resource == "sources":
         detail = request.query_params.get("detail")
         if detail:

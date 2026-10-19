@@ -1,5 +1,6 @@
 """Official provider APIs. Only this module knows their request/response shapes."""
 import json
+import time
 from urllib.parse import quote
 import httpx
 from app.config import settings
@@ -179,12 +180,46 @@ def predis_result(post_id: str, format_name: str):
     return None
 
 
-def creatify_tts_create(script: str):
-    if not all((settings.creatify_api_id, settings.creatify_api_key, settings.creatify_tts_accent)):
-        raise ValueError("Set CREATIFY_API_ID, CREATIFY_API_KEY, and CREATIFY_TTS_ACCENT first.")
+_voice_cache: tuple[float, list[dict]] = (0, [])
+
+
+def creatify_voices() -> list[dict]:
+    """Read Creatify's stock accents and sample URLs without exposing credentials."""
+    global _voice_cache
+    if _voice_cache[0] > time.monotonic():
+        return _voice_cache[1]
+    if not settings.creatify_api_id or not settings.creatify_api_key:
+        return []
+    try:
+        response = httpx.get("https://api.creatify.ai/api/voices/", timeout=30,
+            headers={"X-API-ID": settings.creatify_api_id, "X-API-KEY": settings.creatify_api_key})
+        response.raise_for_status()
+        data = response.json()
+    except (httpx.HTTPError, ValueError) as exc:
+        raise ProviderError("Creatify", operation="voice list") from exc
+    if not isinstance(data, list):
+        raise ProviderError("Creatify", operation="voice list")
+    voices = []
+    for voice in data:
+        if not isinstance(voice, dict):
+            continue
+        for accent in voice.get("accents") or []:
+            if not isinstance(accent, dict) or not accent.get("id"):
+                continue
+            voices.append({"id": str(accent["id"]), "name": str(voice.get("name") or "Voice"),
+                "gender": str(voice.get("gender") or ""),
+                "accent": str(accent.get("accent_name") or ""),
+                "previewUrl": str(accent.get("preview_url") or "")})
+    _voice_cache = (time.monotonic() + 3600, voices)
+    return voices
+
+
+def creatify_tts_create(script: str, accent: str | None = None):
+    if not all((settings.creatify_api_id, settings.creatify_api_key, accent or settings.creatify_tts_accent)):
+        raise ValueError("Set CREATIFY_API_ID and CREATIFY_API_KEY, then choose a voice or set CREATIFY_TTS_ACCENT.")
     return call("Creatify", "POST", "https://api.creatify.ai/api/text_to_speech/",
         headers={"X-API-ID": settings.creatify_api_id, "X-API-KEY": settings.creatify_api_key},
-        json={"script": script, "accent": settings.creatify_tts_accent}, operation="TTS create")
+        json={"script": script, "accent": accent or settings.creatify_tts_accent}, operation="TTS create")
 
 
 def creatify_tts_result(job_id: str):

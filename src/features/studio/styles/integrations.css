@@ -74,6 +74,17 @@
 .shell:has(.board-workspace) .page{flex:1;min-height:0;overflow:hidden;padding-block:20px 20px}
 .board-workspace{display:flex;flex-direction:column;flex:1;min-height:0;gap:16px;overflow:hidden}
 .board-workspace>.tools,.board-workspace>.kbtabs,.board-workspace>.notes{flex-shrink:0}
+.board-scroll-controls{display:flex;align-items:center;justify-content:flex-end;gap:8px;flex-shrink:0}
+.board-scroll-controls .btn{min-width:36px}
+.voice-preview{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:8px 0}
+.voice-preview audio{max-width:100%;height:34px}
+.library-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:14px}
+.library-card{display:flex;flex-direction:column;gap:6px;border:1px solid var(--line);border-radius:var(--r3);padding:10px;min-width:0}
+.library-card img,.library-card video{width:100%;height:160px;object-fit:contain;background:var(--sunk);border-radius:6px}
+.library-card b{overflow-wrap:anywhere}
+.library-picker{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;max-height:320px;overflow-y:auto}
+.library-picker button{display:flex;flex-direction:column;gap:4px;padding:8px;text-align:left;border:1px solid var(--line);border-radius:6px;background:var(--surface);color:var(--ink);cursor:pointer}
+.library-picker img,.library-picker video{width:100%;height:100px;object-fit:contain}
 .board-workspace .kb{flex:1;min-height:0;align-items:stretch;overflow-y:hidden}
 .board-workspace .kcol{height:100%;min-height:0;overflow:hidden}
 .board-workspace .khead{flex-shrink:0}

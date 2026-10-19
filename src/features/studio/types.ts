@@ -22,6 +22,7 @@ export interface Post {
   cost?: number;
   caption?: string;
   script?: string;
+  voiceAccent?: string;
   videoDirection?: string;
   mediaBrief?: string;
   tags?: string;
@@ -82,7 +83,7 @@ export interface StudioState {
   events: Event[];
   sourceFeeds?: Record<string, SourceProvider>;
   newsProvider?: 'currents' | 'newsdata';
-  brand: { voice: string; never: string[]; styles: BrandStyle[]; reference: { postId: number; note: string } };
+  brand: { voice: string; never: string[]; styles: BrandStyle[]; reference: { postId: number; note: string }; referencePosts?: {id:number; title:string}[] };
   team: TeamMember[];
   activity: Activity[];
   later: string[];

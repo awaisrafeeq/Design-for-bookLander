@@ -20,6 +20,7 @@ export default function SourcesPage() {
   const { state, command, pending } = useStudio();
   const [topic, setTopic] = useState('');
   const [feeds, setFeeds] = useState<Sources | null>(null);
+  const [limitDrafts,setLimitDrafts] = useState<Partial<Record<Source,number>>>({});
   useEffect(() => {
     let alive = true;
     const refresh = async () => { try { const result = await studioApi.get('sources'); if (alive) setFeeds(result); } catch { /* keep the last successful feed status */ } };
@@ -51,6 +52,12 @@ export default function SourcesPage() {
           </button>;
         })}
       </div>
+      <div className="grid3" style={{marginTop:12}}>{rows.map(key=><label key={key} className="card pad small">{sources[key].label} idea backlog limit
+        <input type="number" min={0} max={50} value={limitDrafts[key] ?? feedState.ideaLimits?.[key] ?? 5} disabled={pending || !state.permissions?.['sources.manage']}
+          onChange={event=>setLimitDrafts(current=>({...current,[key]:Number(event.target.value)}))}
+          onBlur={event=>{const value=Number(event.target.value);if(value!==feedState.ideaLimits?.[key])void command('sources',{action:'idea-limit',key,value}).then(ok=>{if(ok)setLimitDrafts(current=>({...current,[key]:undefined}))});}}/>
+        <span className="muted">{feedState.ideaBacklog?.[key] ?? 0} waiting in Ideas · 0 pauses AI suggestions from this source</span>
+      </label>)}</div>
       <div className="tools" style={{ marginTop: 12 }}>
         <label className="small">News provider
           <select aria-label="News provider" value={newsProviderKey} disabled={pending} onChange={event => void command('sources', { action: 'news-provider', provider: event.target.value })}>

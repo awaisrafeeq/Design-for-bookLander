@@ -5,7 +5,7 @@ from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import func, select, text
 from app.brand_checks import check_content
 from app.config import settings
 from app.db import SessionLocal
@@ -44,7 +44,10 @@ def brand_snapshot(db):
     if not policy:
         raise ValueError("Configure the brand policy first.")
     rules = list(db.scalars(select(BrandRule.rule).where(BrandRule.policy_version_id == policy.id)))
-    return {"version": policy.version, "voice": policy.voice, "rules": rules, "formats": policy.format_guidance}
+    reference = db.get(StudioPost, policy.reference_post_id) if policy.reference_post_id else None
+    reference_text = (reference.payload.get("caption") or "")[:1200] if reference and reference.stage == "published" else ""
+    return {"version": policy.version, "voice": policy.voice, "rules": rules, "formats": policy.format_guidance,
+            "reference": {"caption": reference_text, "guidance": (policy.reference_note or "")[:1000]}}
 
 
 def queue(db, kind: str, provider: str, actor_id, post_id=None, payload=None):
@@ -97,6 +100,12 @@ def execute_text(db, job, post):
         "Preserve the subject and unaffected content; without a revision request, create a fresh alternative on the same topic. "
         "Use only supplied evidence. Do not invent inventory, title availability or factual claims. "
         f"Voice: {policy['voice']}. Rules: {json.dumps(policy['rules'])}.")
+    reference = policy.get("reference") or {}
+    if reference.get("caption"):
+        instruction += (" Use this approved published caption only as a writing-style reference. "
+                        "Do not copy its wording or treat its claims as evidence. "
+                        f"Reference caption: {json.dumps(reference['caption'])}. "
+                        f"Style guidance: {json.dumps(reference.get('guidance', ''))}.")
     if job.payload.get("catalogueBook"):
         instruction += (" A catalogueBook object may be supplied in the input. Use its title, author, publisher, "
                         "description, and subject only as book reference context. Do not imply the title is in stock "
@@ -175,7 +184,14 @@ def execute_text(db, job, post):
         raise ValueError(f"OpenRouter model {settings.openrouter_model} returned an incomplete structured answer.{detail} Use a model with strict JSON Schema support, such as openai/gpt-4.1-mini.") from exc
     if job.kind in {"suggest", "new_angle"}:
         topics = job.payload["topics"]
+        if job.kind == "suggest":
+            # Serialize AI idea insertion so two workers cannot both fill the same category slot.
+            db.execute(text("SELECT pg_advisory_xact_lock(1852778465)"))
         existing = {re.sub(r"\W+", "", p.payload.get("title", "").casefold()) for p in db.scalars(select(StudioPost))}
+        limits = job.payload.get("ideaLimits") or {}
+        backlog = {source: db.scalar(select(func.count(StudioPost.id)).where(
+            StudioPost.stage == "idea", StudioPost.payload["source"].as_string() == source)) or 0
+                   for source in ("calendar", "news", "books", "team")} if job.kind == "suggest" else {}
         count = 0
         ideas = data.get("ideas")
         if not isinstance(ideas, list) or not ideas:
@@ -214,6 +230,8 @@ def execute_text(db, job, post):
             existing.add(key)
             primary = evidence[0]
             source = primary.get("source") if primary.get("source") in {"calendar", "news", "books", "team"} else "team"
+            if backlog[source] >= int(limits.get(source, 5)):
+                continue
             source_label = primary.get("sourceLabel") or {"calendar": "Calendar", "news": "News", "books": "Books", "team": "Team topic"}[source]
             metadata = primary.get("metadata") if isinstance(primary.get("metadata"), dict) else {}
             payload = {"title": title, "book": primary.get("title") if source == "books" else "Team topic",
@@ -225,6 +243,7 @@ def execute_text(db, job, post):
                 "human": False, "sourceEvidence": evidence, "sourceIds": [str(topic["id"]) for topic in evidence], "brandPolicyVersion": policy["version"],
                 "observedAt": datetime.now(UTC).isoformat()}
             db.add(StudioPost(stage="idea", version=1, payload=payload, version_history=[], created_by=job.actor_id))
+            backlog[source] += 1
             count += 1
         job.result = {**job.result, "ideasCreated": count}
     else:
@@ -251,7 +270,7 @@ def execute_media(db, job, post):
         if job.provider == "Creatify":
             state = job.result or {}
             tts_id = state.get("ttsJobId")
-            tts = creatify_tts_result(tts_id) if tts_id else creatify_tts_create(job.payload["voiceover"])
+            tts = creatify_tts_result(tts_id) if tts_id else creatify_tts_create(job.payload["voiceover"], job.payload.get("voiceAccent"))
             if not tts_id:
                 tts_id = tts.get("id")
                 if tts_id:

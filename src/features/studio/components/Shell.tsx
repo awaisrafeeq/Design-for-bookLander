@@ -13,7 +13,7 @@ import { usePostVersion, VersionPicker } from './PostVersions';
 
 const groups: { title: string; links: [string,string,string,string][] }[] = [
   { title: 'Work', links: [['today','home','Today','/'],['board','board','Board','/board'],['ideas','bulb','Ideas','/ideas'],['review','eye','Review','/review'],['schedule','cal','Schedule','/schedule'],['results','chart','Results','/results']] },
-  { title: 'Set up', links: [['sources','zap','Sources & events','/sources'],['catalogue','book','Catalogue','/catalogue'],['brand','brush','Brand & styles','/brand'],['spend','dollar','AI spend','/spend'],['team','users','Team & roles','/team']] },
+  { title: 'Set up', links: [['sources','zap','Sources & events','/sources'],['catalogue','book','Catalogue','/catalogue'],['library','board','Media library','/library'],['brand','brush','Brand & styles','/brand'],['spend','dollar','AI spend','/spend'],['team','users','Team & roles','/team']] },
   { title: 'Support', links: [['logs','list','Logs','/logs'],['help','help','Help','/help'],['profile','users','Profile','/profile']] },
 ];
 
@@ -57,7 +57,7 @@ function ShellContent({ children }: { children: React.ReactNode }) {
       router.refresh();
     }
   };
-  const moduleNames: Record<string, string> = { board: 'Board', ideas: 'Ideas', review: 'Review', schedule: 'Schedule', results: 'Results', sources: 'Sources', catalogue: 'Catalogue', brand: 'Brand', spend: 'AI spend', team: 'Team', logs: 'Logs' };
+  const moduleNames: Record<string, string> = { board: 'Board', ideas: 'Ideas', review: 'Review', schedule: 'Schedule', results: 'Results', sources: 'Sources', catalogue: 'Catalogue', library: 'Board', brand: 'Brand', spend: 'AI spend', team: 'Team', logs: 'Logs' };
   const visibleGroups = groups.map(group=>({...group, links:group.links.filter(([id])=>!moduleNames[id] || state.modules?.includes(moduleNames[id]))}));
   const canView = visibleGroups.some(group=>group.links.some(link=>link[3]===pathname));
   const tabs = visibleGroups[0].links.filter(item=>['today','board','review','schedule'].includes(item[0]));

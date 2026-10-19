@@ -1,6 +1,7 @@
 """Staff catalogue search and individual manual book maintenance."""
 import base64
 import binascii
+import html
 import json
 import re
 from uuid import UUID
@@ -85,6 +86,14 @@ def _encode_cursor(row: dict, search: str, page_size: int) -> str:
     return base64.urlsafe_b64encode(json.dumps(value).encode()).decode().rstrip("=")
 
 
+def _display(value: str | None) -> str:
+    value = str(value or "")
+    if value == r"\N":
+        return ""
+    # The imported catalogue contains both plain and entity-encoded titles.
+    return html.unescape(html.unescape(value))
+
+
 def read_catalogue(db: Session, search: str, cursor: str = "", page_size: int = 25) -> dict:
     search = _clean(search, 120)
     if page_size not in (25, 50):
@@ -114,14 +123,16 @@ def read_catalogue(db: Session, search: str, cursor: str = "", page_size: int = 
     # Keep the list narrow; descriptions and other large fields are fetched on row open.
     listing = text(f"""
         SELECT id, source, isbn, title, author, format, archived, sort_title FROM (
-          SELECT NULL::text AS id, 'imported' AS source, c001 AS isbn,
-                 c003 AS title, c006 AS author, c015 AS format,
-                 false AS archived, left(lower(c003), 500) COLLATE "C" AS sort_title
-          FROM public.books WHERE true {imported_where}
+          (SELECT NULL::text AS id, 'imported' AS source, c001 AS isbn,
+                  c003 AS title, c006 AS author, c015 AS format,
+                  false AS archived, left(lower(c003), 500) COLLATE "C" AS sort_title
+           FROM public.books WHERE true {imported_where}
+           ORDER BY sort_title, c001 COLLATE "C" LIMIT :limit)
           UNION ALL
-          SELECT id::text, 'manual', isbn, title, author, format,
-                 archived, left(lower(title), 500) COLLATE "C"
-          FROM manual_catalogue_books WHERE true {manual_where}
+          (SELECT id::text, 'manual', isbn, title, author, format,
+                  archived, left(lower(title), 500) COLLATE "C" AS sort_title
+           FROM manual_catalogue_books WHERE true {manual_where}
+           ORDER BY sort_title, isbn COLLATE "C" LIMIT :limit)
         ) books
         ORDER BY sort_title, isbn COLLATE "C"
         LIMIT :limit
@@ -132,6 +143,8 @@ def read_catalogue(db: Session, search: str, cursor: str = "", page_size: int = 
     next_cursor = _encode_cursor(page[-1], search, page_size) if has_more else None
     for row in page:
         row.pop("sort_title")
+        row["title"] = _display(row["title"])
+        row["author"] = _display(row["author"])
     return {"books": page, "search": search, "nextCursor": next_cursor,
             "hasMore": has_more, "pageSize": page_size}
 
@@ -156,10 +169,10 @@ def read_catalogue_detail(db: Session, source: str, identifier: str) -> dict:
     if row is None:
         raise HTTPException(404, "Book not found")
     return {"id": None, "source": "imported", "isbn": row["c001"] or "",
-            "title": row["c003"] or "", "author": row["c006"] or "",
-            "format": row["c015"] or "", "publisher": row["c012"] or "",
-            "description": (row["c046"] or "")[:10000],
-            "subjects": [value for value in (row["c023"], row["c025"]) if value and value != r"\N"],
+            "title": _display(row["c003"]), "author": _display(row["c006"]),
+            "format": _display(row["c015"]), "publisher": _display(row["c012"]),
+            "description": _display(row["c046"])[:10000],
+            "subjects": [_display(value) for value in (row["c023"], row["c025"]) if value and value != r"\N"],
             "language": row["c037"] or "", "pages": row["c030"] or None,
             "archived": False}
 
