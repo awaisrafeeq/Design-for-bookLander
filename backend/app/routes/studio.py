@@ -2,7 +2,7 @@ import secrets
 import json
 from datetime import UTC, datetime, time, timedelta
 from decimal import Decimal, InvalidOperation
-from uuid import UUID
+from uuid import UUID, uuid4
 from zoneinfo import ZoneInfo
 
 from email_validator import EmailNotValidError, validate_email
@@ -18,7 +18,7 @@ from app.models import (AuditEvent, AuthSession, BrandPolicyVersion, BrandRule, 
                         StudioPost, User, WeeklyStyleLearning)
 from app.security import hash_password, hash_session_token
 from app.jobs import ACTIVE, job_dto, save_checks, snapshot_post, editable_stage, workflow_stage
-from app.models import WorkJob, Publication, PublicationAnalytics
+from app.models import WorkJob, Publication
 from app.permissions import PERMISSIONS, effective_permissions, require_permission
 from app.workflow import generation_command, connections_dto, schedule_command, sync_accounts, accounts_dto
 from app.providers import Zernio, creatify_voices, text_completion, parse_generated_json
@@ -26,7 +26,6 @@ from app.publishing import PLATFORMS
 from app.source_feeds import configured_providers, source_events, source_feed_status
 from app.catalogue_admin import read_catalogue, read_catalogue_detail, mutate_catalogue
 from app.help_service import ARTICLES, ai_budget_available, answer_help
-from app.post_templates import template_options
 
 router = APIRouter(prefix="/studio", tags=["studio settings"])
 
@@ -89,8 +88,6 @@ def active_brand(db: Session, *, lock: bool = False) -> BrandPolicyVersion:
 
 def read_brand(db: Session) -> dict:
     policy = active_brand(db)
-    published = db.scalars(select(StudioPost).where(StudioPost.stage == "published")
-                           .order_by(StudioPost.updated_at.desc()).limit(100)).all()
     rules = db.scalars(select(BrandRule).where(BrandRule.policy_version_id == policy.id).order_by(BrandRule.created_at, BrandRule.id)).all()
     guidance = policy.format_guidance or {}
     learning = db.execute(select(WeeklyStyleLearning, StudioPost).join(
@@ -110,12 +107,10 @@ def read_brand(db: Session) -> dict:
         "voice": policy.voice,
         "never": [rule.rule for rule in rules],
         "styles": [
-            {"format": key, "name": guidance.get(key, {}).get("name", key.title()), "guidance": guidance.get(key, {}).get("guidance", "")}
+            {"format": key, "name": guidance.get(key, {}).get("name", key.title()), "guidance": guidance.get(key, {}).get("guidance", ""),
+             "templates": guidance.get(key, {}).get("templates", [])}
             for key in ("video", "carousel", "image")
         ],
-        "reference": {"postId": policy.reference_post_id or 0, "note": policy.reference_note or ""},
-        "referencePosts": [{"id": post.id, "title": post.payload.get("title", "Untitled")}
-                           for post in published],
         "weeklyLearning": learning_dto,
         "version": policy.version,
     }
@@ -131,14 +126,16 @@ def mutate_brand(db: Session, user: User, request: Request, command: dict) -> di
         post = db.scalar(select(StudioPost).where(StudioPost.id == post_id, StudioPost.stage == "published"))
         if not post or not str((post.payload or {}).get("caption") or "").strip():
             raise HTTPException(422, "Choose a published post with a caption")
-        analytics = db.execute(select(PublicationAnalytics.metrics).join(
-            Publication, Publication.id == PublicationAnalytics.publication_id).where(
-            Publication.post_id == post_id, PublicationAnalytics.sync_status == "synced")).scalars().first()
-        if not analytics or not isinstance(analytics.get("reach"), (int, float)) or analytics["reach"] < 20:
-            raise HTTPException(422, "Wait for reliable post analytics before learning from this post")
         post_format = str(post.payload.get("format") or "image")
         if post_format not in {"image", "carousel", "video"}:
             raise HTTPException(422, "This post format cannot update brand guidance")
+        policy = active_brand(db)
+        guidance = dict(policy.format_guidance or {})
+        style = dict(guidance.get(post_format) or {})
+        existing = str(style.get("guidance") or "").strip()
+        marker = f"Post #{post_id} learning:"
+        if marker in existing:
+            raise HTTPException(409, "Learning from this post is already saved")
         if not settings.openrouter_api_key or not settings.openrouter_model:
             raise HTTPException(503, "Configure OpenRouter before learning from a post")
         if not ai_budget_available(db):
@@ -146,12 +143,10 @@ def mutate_brand(db: Session, user: User, request: Request, command: dict) -> di
         schema = {"type": "object", "additionalProperties": False,
                   "properties": {"guidance": {"type": "string"}}, "required": ["guidance"]}
         instruction = ("Extract one concise reusable writing or visual style rule from the published post. "
-                       "Describe structure and tone, never copy the post, invent facts, or claim that style caused performance. "
-                       "The metrics are context only. Keep guidance under 300 characters.")
+                       "Describe structure and tone; never copy text, invent facts, or claim that a style caused performance. Keep guidance under 300 characters.")
         content, usage, provider_id = text_completion(json.dumps({"title": post.payload.get("title"),
             "format": post_format, "caption": str(post.payload.get("caption"))[:1800],
-            "mediaBrief": str(post.payload.get("mediaBrief") or post.payload.get("videoDirection") or "")[:1000],
-            "metrics": analytics}), instruction, schema)
+            "mediaBrief": str(post.payload.get("mediaBrief") or post.payload.get("videoDirection") or "")[:1000]}), instruction, schema)
         if usage.get("cost") is not None:
             db.add(SpendEntry(provider="OpenRouter", category="text", amount_usd=Decimal(str(usage["cost"])),
                               model=settings.openrouter_model, provider_job_id=provider_id))
@@ -180,7 +175,7 @@ def mutate_brand(db: Session, user: User, request: Request, command: dict) -> di
         db.query(BrandPolicyVersion).filter(BrandPolicyVersion.active.is_(True)).update(
             {"active": False}, synchronize_session=False)
         updated = BrandPolicyVersion(version=policy.version + 1, voice=policy.voice,
-            format_guidance=guidance, reference_post_id=post_id, reference_note=suggestion,
+            format_guidance=guidance, reference_post_id=None, reference_note="",
             active=True, created_by=user.id)
         db.add(updated)
         db.flush()
@@ -190,6 +185,43 @@ def mutate_brand(db: Session, user: User, request: Request, command: dict) -> di
             request_id=request.headers.get("x-request-id"), details={"format": post_format, "version": updated.version}))
         db.commit()
         return {"message": "Post style added to Brand & styles"}
+    if command.get("action") == "unlearn-post":
+        try:
+            post_id = int(command.get("postId"))
+        except (TypeError, ValueError):
+            raise HTTPException(422, "Choose a post to remove learning from") from None
+        policy = active_brand(db, lock=True)
+        guidance = dict(policy.format_guidance or {})
+        found = False
+        for format_name, raw_style in guidance.items():
+            if not isinstance(raw_style, dict):
+                continue
+            style = dict(raw_style)
+            marker = f"Post #{post_id} learning:"
+            lines = str(style.get("guidance") or "").splitlines()
+            kept = [line for line in lines if not line.startswith(marker)]
+            if len(kept) != len(lines):
+                style["guidance"] = "\n".join(kept).strip()
+                guidance[format_name] = style
+                found = True
+        if not found:
+            raise HTTPException(404, "This post's learning was not found in active brand guidance")
+        old_rules = db.scalars(select(BrandRule).where(BrandRule.policy_version_id == policy.id)
+                               .order_by(BrandRule.created_at, BrandRule.id)).all()
+        db.query(BrandPolicyVersion).filter(BrandPolicyVersion.active.is_(True)).update(
+            {"active": False}, synchronize_session=False)
+        updated = BrandPolicyVersion(version=policy.version + 1, voice=policy.voice,
+            format_guidance=guidance,
+            reference_post_id=None, reference_note="",
+            active=True, created_by=user.id)
+        db.add(updated)
+        db.flush()
+        db.add_all([BrandRule(policy_version_id=updated.id, rule=rule.rule) for rule in old_rules])
+        db.add(AuditEvent(actor_user_id=user.id, action="brand.post_learning_removed",
+            resource_type="studio_post", resource_id=str(post_id),
+            request_id=request.headers.get("x-request-id"), details={"version": updated.version}))
+        db.commit()
+        return {"message": "Post learning removed from Brand & styles"}
     if command.get("action") == "review-learning":
         try:
             learning_id = UUID(str(command.get("id")))
@@ -216,8 +248,8 @@ def mutate_brand(db: Session, user: User, request: Request, command: dict) -> di
             db.query(BrandPolicyVersion).filter(BrandPolicyVersion.active.is_(True)).update(
                 {"active": False}, synchronize_session=False)
             updated = BrandPolicyVersion(version=policy.version + 1, voice=policy.voice,
-                                         format_guidance=guidance, reference_post_id=policy.reference_post_id,
-                                         reference_note=policy.reference_note or "", active=True, created_by=user.id)
+                                         format_guidance=guidance, reference_post_id=None,
+                                         reference_note="", active=True, created_by=user.id)
             db.add(updated)
             db.flush()
             db.add_all([BrandRule(policy_version_id=updated.id, rule=rule.rule) for rule in old_rules])
@@ -235,13 +267,41 @@ def mutate_brand(db: Session, user: User, request: Request, command: dict) -> di
     voice = policy.voice
     guidance = dict(policy.format_guidance or {})
     rule_values = [item.rule for item in old_rules]
-    reference_post_id = policy.reference_post_id
-    reference_note = policy.reference_note or ""
     action = command.get("action")
     key = command.get("key")
     value = command.get("value")
 
-    if key == "voice":
+    if action in {"template-add", "template-update", "template-delete"}:
+        format_name = command.get("format")
+        if format_name not in {"video", "carousel", "image"}:
+            raise HTTPException(422, "Choose a valid post format")
+        entry = dict(guidance.get(format_name) or {})
+        templates = [dict(item) for item in entry.get("templates", []) if isinstance(item, dict)]
+        if action == "template-add":
+            name = str(command.get("name") or "").strip()
+            instructions = str(command.get("instructions") or "").strip()
+            if not name or len(name) > 80 or not instructions or len(instructions) > 1600:
+                raise HTTPException(422, "Enter a template name (1–80 characters) and instructions (1–1,600 characters)")
+            if len(templates) >= 20:
+                raise HTTPException(409, "A post type can have up to 20 templates")
+            templates.append({"id": str(uuid4()), "name": name, "instructions": instructions})
+        else:
+            template_id = str(command.get("templateId") or "")
+            index = next((index for index, item in enumerate(templates) if item.get("id") == template_id), None)
+            if index is None:
+                raise HTTPException(404, "Style template not found")
+            if action == "template-delete":
+                templates.pop(index)
+            else:
+                name = str(command.get("name") or "").strip()
+                instructions = str(command.get("instructions") or "").strip()
+                if not name or len(name) > 80 or not instructions or len(instructions) > 1600:
+                    raise HTTPException(422, "Enter a template name (1–80 characters) and instructions (1–1,600 characters)")
+                templates[index] = {**templates[index], "name": name, "instructions": instructions}
+        entry["templates"] = templates
+        entry.setdefault("name", format_name.title())
+        guidance[format_name] = entry
+    elif key == "voice":
         voice = str(value or "").strip()
         if not voice:
             raise HTTPException(status_code=422, detail="Brand voice cannot be empty")
@@ -264,25 +324,12 @@ def mutate_brand(db: Session, user: User, request: Request, command: dict) -> di
             rule_values.pop(index)
         except (TypeError, ValueError, IndexError):
             raise HTTPException(status_code=404, detail="Brand rule not found") from None
-    elif action == "reference":
-        raw_id = command.get("postId")
-        try:
-            reference_post_id = int(raw_id) if raw_id else None
-        except (TypeError, ValueError):
-            raise HTTPException(422, "Choose a published post") from None
-        reference_note = str(command.get("note") or "").strip()
-        if len(reference_note) > 1000:
-            raise HTTPException(422, "Reference guidance must be 1,000 characters or fewer")
-        if reference_post_id and not db.scalar(select(StudioPost.id).where(StudioPost.id == reference_post_id, StudioPost.stage == "published")):
-            raise HTTPException(422, "Choose a published post")
-        if not reference_post_id:
-            reference_note = ""
     else:
         raise HTTPException(status_code=422, detail="Unknown brand setting")
 
     db.query(BrandPolicyVersion).filter(BrandPolicyVersion.active.is_(True)).update({"active": False}, synchronize_session=False)
     updated = BrandPolicyVersion(version=policy.version + 1, voice=voice, format_guidance=guidance,
-                                 reference_post_id=reference_post_id, reference_note=reference_note,
+                                 reference_post_id=None, reference_note="",
                                  active=True, created_by=user.id)
     db.add(updated)
     db.flush()
@@ -835,8 +882,6 @@ def get_setting_resource(
     user = session_data[0]
     if resource == "help":
         return {"articles": [{"q": title, "a": answer} for title, answer in ARTICLES]}
-    if resource == "templates":
-        return template_options()
     if resource == "brand":
         return read_brand(db)
     if resource == "spend":

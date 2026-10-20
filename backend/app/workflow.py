@@ -6,7 +6,6 @@ from fastapi import HTTPException
 from sqlalchemy import select
 
 from app.config import settings
-from app.post_templates import TEXT_TEMPLATES, VIDEO_TEMPLATES
 from app.catalogue import find_catalogue_book
 from app.jobs import ACTIVE, brand_snapshot, queue, save_checks, schedule_job, editable_stage, workflow_stage
 from app.models import ProviderAccount, Publication, SourceItem, SourceSetting, StudioPost, User, WorkJob
@@ -97,9 +96,11 @@ def generation_command(db, user, command):
                       {"topics": [{"id": str(post.id), "title": post.payload["title"], "summary": post.payload.get("note", ""), "source": "team"}], "brand": policy})
                 continue
             if action == "generate-media":
-                video_template = command.get("videoTemplate", "editorial")
-                if video_template not in VIDEO_TEMPLATES:
-                    raise HTTPException(422, "Choose a valid video style")
+                template_id = str(command.get("styleTemplateId") or "")
+                style_template = next((item for item in (policy.get("formats", {}).get(post.payload["format"], {}).get("templates") or [])
+                                       if item.get("id") == template_id), None) if template_id else None
+                if template_id and not style_template:
+                    raise HTTPException(422, "Choose a saved template for this post format")
                 if post.stage not in {"selected", "review"}:
                     raise HTTPException(409, "Pick an idea and add a draft before generating media.")
                 if not post.payload.get("caption"):
@@ -124,7 +125,8 @@ def generation_command(db, user, command):
                              "Show three visually distinct shots with natural camera movement: a wide establishing view, "
                              "a close detail with a clear physical action, and a closing view. "
                              "Warm, polished editorial lighting; no talking avatar.")
-                    brief += f" Visual style: {VIDEO_TEMPLATES[video_template][1]}"
+                    if style_template:
+                        brief += f" Apply this saved video template direction: {style_template['instructions']}"
                     duration = max(10, min(60, (len(voiceover.split()) * 60 + 139) // 140))
                 else:
                     # Give Predis both the post context and AI-authored visual direction.
@@ -141,17 +143,22 @@ def generation_command(db, user, command):
                         f"Hashtags/context: {post.payload.get('tags', '')}",
                         f"Visual direction: {post.payload.get('mediaBrief') or post.payload.get('caption', '')}",
                         f"Style guidance for {post.payload.get('format', 'image')}: {(policy.get('formats') or {}).get(post.payload.get('format', 'image'), {}).get('guidance', '')}",
+                        f"Saved style template: {style_template['instructions'] if style_template else ''}",
                         f"Brand voice: {policy['voice']}",
                         f"Brand rules: {policy['rules']}",
                         "Do not add text, quotes, prices, discounts, stock, availability, delivery, or other factual claims.",
                         "Do not imitate or invent an exact book cover. Use an uploaded approved cover only if one is provided.",
                     ))
                 queue(db, "media", provider, user.id, post.id,
-                      {"brief": brief, "brand": policy, "previousStage": post.stage, "videoTemplate": video_template if provider == "Creatify" else None, **({"duration": duration, "voiceover": voiceover, "voiceAccent": post.payload.get("voiceAccent") or settings.creatify_tts_accent} if provider == "Creatify" else {})})
+                      {"brief": brief, "brand": policy, "previousStage": post.stage,
+                       "styleTemplateId": template_id or None,
+                       **({"duration": duration, "voiceover": voiceover, "voiceAccent": post.payload.get("voiceAccent") or settings.creatify_tts_accent} if provider == "Creatify" else {})})
             else:
-                text_template = command.get("textTemplate", "standard")
-                if text_template not in TEXT_TEMPLATES:
-                    raise HTTPException(422, "Choose a valid writing style")
+                template_id = str(command.get("styleTemplateId") or "")
+                style_template = next((item for item in (policy.get("formats", {}).get(post.payload["format"], {}).get("templates") or [])
+                                       if item.get("id") == template_id), None) if template_id else None
+                if template_id and not style_template:
+                    raise HTTPException(422, "Choose a saved template for this post format")
                 if post.stage not in ({"review", "selected"} if action == "revise" else {"selected"}):
                     raise HTTPException(409, "Pick an idea before generation, or revise a post in Review.")
                 note = "\n".join(str(command.get(key) or "").strip() for key in ("reason", "note")).strip()[:1000]
@@ -164,7 +171,9 @@ def generation_command(db, user, command):
                 if draft:
                     require_permission(user, "content.edit")
                 catalogue_book = find_catalogue_book(db, str(post.payload.get("title") or ""))
-                job_payload = {"note": note, "brand": policy, "inputContent": draft, "textTemplate": text_template,
+                job_payload = {"note": note, "brand": policy, "inputContent": draft,
+                               "styleTemplateId": template_id or None,
+                               "styleTemplateInstructions": style_template["instructions"] if style_template else "",
                                "previousStage": post.stage}
                 if catalogue_book:
                     job_payload["catalogueBook"] = catalogue_book

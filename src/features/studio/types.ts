@@ -25,8 +25,7 @@ export interface Post {
   voiceAccent?: string;
   videoDirection?: string;
   mediaBrief?: string;
-  textTemplate?: string;
-  videoTemplate?: string;
+  styleTemplateId?: string;
   tags?: string;
   warning?: string;
   note?: string;
@@ -60,7 +59,8 @@ export interface Post {
 export interface Connection { id: string; name: string; purpose: string; connected: boolean; detail?: string }
 export interface Event { id: number | string; name: string; source: Source; date: string; days: number; titles: number; url?: string; summary?: string; provider?: string }
 export interface SourceProvider { label: string; configured: boolean; enabled: boolean; status: string; error?: string | null; lastSyncedAt?: string | null; items: number }
-export interface BrandStyle { format: Format; name: string; guidance: string }
+export interface BrandStyleTemplate { id:string; name:string; instructions:string }
+export interface BrandStyle { format: Format; name: string; guidance: string; templates:BrandStyleTemplate[] }
 export interface TeamMember { id: number | string; name: string; initials: string; email: string; role: 'Super admin' | 'Campaigns manager' | 'Approver' | 'Editor' | 'Viewer'; modules: string[]; invited?: boolean; isApprover?: boolean; permissions?: Record<string, boolean>; roleTitles?: string[]; active?: boolean }
 export interface Activity { id: number | string; at: string; actor: string; level: 'info' | 'success' | 'warning' | 'error'; message: string; detail?: string; cause?: string; fix?: string; connectionId?: string; done?: boolean; jobId?: string; postId?: number; status?: string; attempts?: number; providerJobId?: string; nextRetryAt?: string; result?: { credits?: number; ttsCredits?: number; model?: string; usage?: { cost?: number; prompt_tokens?: number; completion_tokens?: number } }; history?: { at: string; attempt: number; status: string; cause?: string }[] }
 export interface Book { id: string; title: string; author: string; format?: string; stock?: number; colors: [string, string, string] }
@@ -85,7 +85,7 @@ export interface StudioState {
   events: Event[];
   sourceFeeds?: Record<string, SourceProvider>;
   newsProvider?: 'currents' | 'newsdata';
-  brand: { voice: string; never: string[]; styles: BrandStyle[]; reference: { postId: number; note: string }; referencePosts?: {id:number; title:string}[]; weeklyLearning?: {id:string;weekStart:string;weekEnd:string;postId:number;title:string;platform:string;format:string;metrics:{engagementGain:number;reachAtEnd:number;weeklyGainRate:number;samples:number};guidance:string;rationale:string}|null };
+  brand: { voice: string; never: string[]; styles: BrandStyle[]; weeklyLearning?: {id:string;weekStart:string;weekEnd:string;postId:number;title:string;platform:string;format:string;metrics:{engagementGain:number;reachAtEnd:number;weeklyGainRate:number;samples:number};guidance:string;rationale:string}|null };
   team: TeamMember[];
   activity: Activity[];
   later: string[];

@@ -8,7 +8,6 @@ from uuid import UUID
 from sqlalchemy import func, select, text
 from app.brand_checks import check_content
 from app.config import settings
-from app.post_templates import TEXT_TEMPLATES
 from app.db import SessionLocal
 from app.media import asset_dto, download_asset, public_url
 from app.models import (AuditEvent, BrandPolicyVersion, BrandRule, MediaAsset, ProviderAccount,
@@ -45,10 +44,7 @@ def brand_snapshot(db):
     if not policy:
         raise ValueError("Configure the brand policy first.")
     rules = list(db.scalars(select(BrandRule.rule).where(BrandRule.policy_version_id == policy.id)))
-    reference = db.get(StudioPost, policy.reference_post_id) if policy.reference_post_id else None
-    reference_text = (reference.payload.get("caption") or "")[:1200] if reference and reference.stage == "published" else ""
-    return {"version": policy.version, "voice": policy.voice, "rules": rules, "formats": policy.format_guidance,
-            "reference": {"caption": reference_text, "guidance": (policy.reference_note or "")[:1000]}}
+    return {"version": policy.version, "voice": policy.voice, "rules": rules, "formats": policy.format_guidance}
 
 
 def queue(db, kind: str, provider: str, actor_id, post_id=None, payload=None):
@@ -101,12 +97,6 @@ def execute_text(db, job, post):
         "Preserve the subject and unaffected content; without a revision request, create a fresh alternative on the same topic. "
         "Use only supplied evidence. Do not invent inventory, title availability or factual claims. "
         f"Voice: {policy['voice']}. Rules: {json.dumps(policy['rules'])}.")
-    reference = policy.get("reference") or {}
-    if reference.get("caption"):
-        instruction += (" Use this approved published caption only as a writing-style reference. "
-                        "Do not copy its wording or treat its claims as evidence. "
-                        f"Reference caption: {json.dumps(reference['caption'])}. "
-                        f"Style guidance: {json.dumps(reference.get('guidance', ''))}.")
     if job.payload.get("catalogueBook"):
         instruction += (" A catalogueBook object may be supplied in the input. Use its title, author, publisher, "
                         "description, and subject only as book reference context. Do not imply the title is in stock "
@@ -142,7 +132,8 @@ def execute_text(db, job, post):
             instruction += " This post's primary platform is Pinterest: keep caption and hashtags together under 800 characters."
         elif post.payload.get("platform") == "TikTok":
             instruction += " This post's primary platform is TikTok: keep caption and hashtags together under 2,200 characters."
-        instruction += " Writing style: " + TEXT_TEMPLATES.get(job.payload.get("textTemplate"), TEXT_TEMPLATES["standard"])[1]
+        if job.payload.get("styleTemplateInstructions"):
+            instruction += " Apply this user-selected style template: " + str(job.payload["styleTemplateInstructions"])[:1600]
         draft = {**post.payload, **job.payload.get("inputContent", {})}
         context_keys = ("title", "note", "caption", "tags", "script", "mediaBrief", "videoDirection", "format", "platform", "source", "reason", "sourceEvidence")
         prompt = json.dumps({
@@ -257,7 +248,9 @@ def execute_text(db, job, post):
         snapshot_post(post, "AI content regenerated" if job.kind == "revise" else "AI caption generated", job.payload.get("note", ""), job.payload.get("previousStage") or editable_stage(post))
         post.version += 1
         post.approved_version = None
-        post.payload = {**post.payload, **job.payload.get("inputContent", {}), "textTemplate": job.payload.get("textTemplate", "standard"), "caption": caption, "tags": str(data.get("tags", ""))[:500],
+        post.payload = {**post.payload, **job.payload.get("inputContent", {}),
+            **({"styleTemplateId": job.payload["styleTemplateId"]} if job.payload.get("styleTemplateId") else {}),
+            "caption": caption, "tags": str(data.get("tags", ""))[:500],
             "script": str(data.get("script", ""))[:5000], "mediaBrief": str(data.get("mediaBrief", ""))[:5000], "error": None}
         post.payload = {**post.payload, "generationKind": None}
         post.payload["videoDirection"] = str(data.get("videoDirection") or data.get("mediaBrief") or "")[:5000]
@@ -329,7 +322,8 @@ def execute_media(db, job, post):
     snapshot_post(post, "AI media generated", stage=job.payload.get("previousStage") or editable_stage(post))
     post.version += 1
     post.approved_version = None
-    post.payload = {**post.payload, "media": [asset_dto(asset) for asset in assets], "error": None, "generationKind": None, "versionReason": "AI media generated", **({"videoTemplate": job.payload["videoTemplate"]} if job.provider == "Creatify" and job.payload.get("videoTemplate") else {})}
+    post.payload = {**post.payload, "media": [asset_dto(asset) for asset in assets], "error": None, "generationKind": None, "versionReason": "AI media generated",
+                    **({"styleTemplateId": job.payload["styleTemplateId"]} if job.payload.get("styleTemplateId") else {})}
     post.stage = "review"
     save_checks(db, post)
     job.status = "completed"
