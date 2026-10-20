@@ -282,8 +282,8 @@ def mutate_brand(db: Session, user: User, request: Request, command: dict) -> di
             instructions = str(command.get("instructions") or "").strip()
             if not name or len(name) > 80 or not instructions or len(instructions) > 1600:
                 raise HTTPException(422, "Enter a template name (1–80 characters) and instructions (1–1,600 characters)")
-            if len(templates) >= 20:
-                raise HTTPException(409, "A post type can have up to 20 templates")
+            if len(templates) >= 100:
+                raise HTTPException(409, "A post type can have up to 100 templates")
             templates.append({"id": str(uuid4()), "name": name, "instructions": instructions})
         else:
             template_id = str(command.get("templateId") or "")
