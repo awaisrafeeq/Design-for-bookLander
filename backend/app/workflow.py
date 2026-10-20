@@ -6,6 +6,7 @@ from fastapi import HTTPException
 from sqlalchemy import select
 
 from app.config import settings
+from app.post_templates import TEXT_TEMPLATES, VIDEO_TEMPLATES
 from app.catalogue import find_catalogue_book
 from app.jobs import ACTIVE, brand_snapshot, queue, save_checks, schedule_job, editable_stage, workflow_stage
 from app.models import ProviderAccount, Publication, SourceItem, SourceSetting, StudioPost, User, WorkJob
@@ -96,6 +97,9 @@ def generation_command(db, user, command):
                       {"topics": [{"id": str(post.id), "title": post.payload["title"], "summary": post.payload.get("note", ""), "source": "team"}], "brand": policy})
                 continue
             if action == "generate-media":
+                video_template = command.get("videoTemplate", "editorial")
+                if video_template not in VIDEO_TEMPLATES:
+                    raise HTTPException(422, "Choose a valid video style")
                 if post.stage not in {"selected", "review"}:
                     raise HTTPException(409, "Pick an idea and add a draft before generating media.")
                 if not post.payload.get("caption"):
@@ -120,6 +124,7 @@ def generation_command(db, user, command):
                              "Show three visually distinct shots with natural camera movement: a wide establishing view, "
                              "a close detail with a clear physical action, and a closing view. "
                              "Warm, polished editorial lighting; no talking avatar.")
+                    brief += f" Visual style: {VIDEO_TEMPLATES[video_template][1]}"
                     duration = max(10, min(60, (len(voiceover.split()) * 60 + 139) // 140))
                 else:
                     # Give Predis both the post context and AI-authored visual direction.
@@ -142,8 +147,11 @@ def generation_command(db, user, command):
                         "Do not imitate or invent an exact book cover. Use an uploaded approved cover only if one is provided.",
                     ))
                 queue(db, "media", provider, user.id, post.id,
-                      {"brief": brief, "brand": policy, "previousStage": post.stage, **({"duration": duration, "voiceover": voiceover, "voiceAccent": post.payload.get("voiceAccent") or settings.creatify_tts_accent} if provider == "Creatify" else {})})
+                      {"brief": brief, "brand": policy, "previousStage": post.stage, "videoTemplate": video_template if provider == "Creatify" else None, **({"duration": duration, "voiceover": voiceover, "voiceAccent": post.payload.get("voiceAccent") or settings.creatify_tts_accent} if provider == "Creatify" else {})})
             else:
+                text_template = command.get("textTemplate", "standard")
+                if text_template not in TEXT_TEMPLATES:
+                    raise HTTPException(422, "Choose a valid writing style")
                 if post.stage not in ({"review", "selected"} if action == "revise" else {"selected"}):
                     raise HTTPException(409, "Pick an idea before generation, or revise a post in Review.")
                 note = "\n".join(str(command.get(key) or "").strip() for key in ("reason", "note")).strip()[:1000]
@@ -156,7 +164,7 @@ def generation_command(db, user, command):
                 if draft:
                     require_permission(user, "content.edit")
                 catalogue_book = find_catalogue_book(db, str(post.payload.get("title") or ""))
-                job_payload = {"note": note, "brand": policy, "inputContent": draft,
+                job_payload = {"note": note, "brand": policy, "inputContent": draft, "textTemplate": text_template,
                                "previousStage": post.stage}
                 if catalogue_book:
                     job_payload["catalogueBook"] = catalogue_book

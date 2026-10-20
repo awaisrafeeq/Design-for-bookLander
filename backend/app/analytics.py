@@ -7,6 +7,7 @@ import logging
 import time
 from collections import defaultdict
 from datetime import UTC, date, datetime, timedelta
+from statistics import median
 
 from fastapi import HTTPException
 from sqlalchemy import func, or_, select
@@ -206,6 +207,39 @@ def read_results(db: Session, params):
                       "status": snapshot.sync_status if snapshot else "pending", "metrics": {key: metrics.get(key) for key in METRIC_NAMES},
                       "engagement": engagement if metrics else None, "dataAsOf": snapshot.data_as_of.isoformat() if snapshot and snapshot.data_as_of else None})
     synced = sum(item["status"] == "synced" for item in posts)
+    # Compare like with like. A published post without reach or complete
+    # interaction metrics cannot be called good or bad from partial data.
+    peer_rates = defaultdict(list)
+    for item in posts:
+        reach_value = item["metrics"].get("reach")
+        interactions = [item["metrics"].get(key) for key in ("likes", "comments", "shares", "saves")]
+        if item["status"] == "synced" and isinstance(reach_value, (int, float)) and reach_value >= 20 and all(isinstance(value, (int, float)) for value in interactions):
+            item["performanceRate"] = round(sum(interactions) / reach_value * 100, 2)
+            peer_rates[(item["platform"], item["format"])].append((item["publicationId"], item["performanceRate"]))
+        else:
+            item["performanceRate"] = None
+    for item in posts:
+        rate_value = item.pop("performanceRate")
+        peers = [value for publication_id, value in peer_rates[(item["platform"], item["format"])]
+                 if publication_id != item["publicationId"]]
+        if rate_value is None or len(peers) < 3:
+            item["performance"] = {"label": "insufficient", "rate": rate_value, "benchmark": None,
+                                   "summary": "Waiting for complete reach and interaction data from at least three other posts on this platform and format."}
+            continue
+        baseline = median(peers)
+        if baseline <= 0:
+            label = "insufficient"
+            summary = "Comparable posts have too little reported engagement for a reliable rating."
+        elif rate_value >= baseline * 1.25:
+            label = "strong"
+            summary = "Engagement rate is at least 25% above the median for this platform and format. This is an observation, not proof of why the post performed well."
+        elif rate_value <= baseline * 0.75:
+            label = "needs_attention"
+            summary = "Engagement rate is at least 25% below the median for this platform and format. Review timing, audience and content before drawing conclusions."
+        else:
+            label = "typical"
+            summary = "Engagement rate is close to the median for this platform and format."
+        item["performance"] = {"label": label, "rate": rate_value, "benchmark": round(baseline, 2), "summary": summary}
     reach = totals["reach"] if available["reach"] else None
     engagement_total = sum(totals[key] for key in ("likes", "comments", "shares", "saves")) if synced else None
     rate = round(engagement_total / reach * 100, 2) if reach and engagement_total is not None else None

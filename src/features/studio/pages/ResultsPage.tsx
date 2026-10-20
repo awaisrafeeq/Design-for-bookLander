@@ -60,7 +60,7 @@ function KpiDialog({metric,results,onClose}:{metric:Metric;results:LiveResults;o
 }
 
 export default function ResultsPage() {
-  const {state,openPost}=useStudio();
+  const {state,openPost,command}=useStudio();
   const [period,setPeriod]=useState(30),[customFrom,setCustomFrom]=useState(since(30)),[customTo,setCustomTo]=useState(today());
   const [results,setResults]=useState<LiveResults|null>(null),[loading,setLoading]=useState(true),[error,setError]=useState(''),[refreshing,setRefreshing]=useState(false);
   const [platform,setPlatform]=useState('all'),[dialog,setDialog]=useState<Metric|null>(null),[chartMetric,setChartMetric]=useState<Metric>('reach');
@@ -74,6 +74,7 @@ export default function ResultsPage() {
   },[period,customFrom,customTo]);
   useEffect(()=>{void load();},[load]);useEffect(()=>{const timer=window.setInterval(()=>void load(true),60000);return()=>window.clearInterval(timer);},[load]);
   const refresh=async()=>{setRefreshing(true);try{await studioApi.act('results',{action:'sync'});setError('Analytics refresh requested. New results will appear after Zernio syncs.');}catch(cause){setError(cause instanceof Error?cause.message:'Could not refresh analytics');}finally{setRefreshing(false);}};
+  const learnPost=async(postId:number)=>{await command('brand',{action:'learn-post',postId});};
   const platforms=useMemo(()=>results?.accounts.reduce<string[]>((list,account)=>list.some(value=>value.toLowerCase()===account.platform.toLowerCase())?list:[...list,account.platform],[])||[],[results]);
   const selectedGroup=results?.byPlatform.find(row=>row.name.toLowerCase()===platform.toLowerCase());
   const kpiValue=(key:Metric):number|null=>{
@@ -140,7 +141,7 @@ export default function ResultsPage() {
       </div>
       <div className="results-lower-grid">
         <section className="card pad sec results-format-panel"><header><div><span className="results-eyebrow">CONTENT MIX · ALL CHANNELS</span><h3>Engagement by format</h3><p>Compare reported interactions across image, video and carousel posts.</p></div><ChartSwitcher value={formatChart} onChange={setFormatChart}/></header><ChartView key={'format-'+formatChart} data={formatData} kind={formatChart} color="#8b63d9" metric="reach"/></section>
-        <section className="card pad sec results-content-panel"><header><div><span className="results-eyebrow">{platform==='all'?'TOP POSTS':'RECENT POSTS'}</span><h3>{platform==='all'?'Content to learn from':'Latest on '+pretty(platform)}</h3><p>Open a post to review its published content and metrics.</p></div></header><div className="results-content-grid">{content.length?content.map(item=><PostCard key={item.publicationId} item={item} posts={state.posts} onOpen={openPost}/>):<div className="results-chart-empty">No published posts in this period.</div>}</div></section>
+        <section className="card pad sec results-content-panel"><header><div><span className="results-eyebrow">{platform==='all'?'TOP POSTS':'RECENT POSTS'}</span><h3>{platform==='all'?'Content to learn from':'Latest on '+pretty(platform)}</h3><p>Open a post to review its published content and metrics.</p></div></header><div className="results-content-grid">{content.length?content.map(item=><PostCard key={item.publicationId} item={item} posts={state.posts} onOpen={openPost} onLearn={learnPost} canLearn={state.permissions?.['brand.edit']===true}/>):<div className="results-chart-empty">No published posts in this period.</div>}</div></section>
       </div>
       <div className="results-disclaimer">{results.note}</div>
     </>}
@@ -148,8 +149,10 @@ export default function ResultsPage() {
   </div>;
 }
 
-function PostCard({item,posts,onOpen}:{item:LiveResultPost;posts:ReturnType<typeof useStudio>['state']['posts'];onOpen:(id:number)=>void}) {
+function PostCard({item,posts,onOpen,onLearn,canLearn}:{item:LiveResultPost;posts:ReturnType<typeof useStudio>['state']['posts'];onOpen:(id:number)=>void;onLearn:(id:number)=>Promise<void>;canLearn:boolean}) {
+  const [learning,setLearning]=useState(false);
   const media=posts.find(post=>post.id===item.id)?.media?.[0];
   const postLink=item.postUrl&&/^https?:\/\//i.test(item.postUrl)?item.postUrl:null;
-  return <article className="results-content-card"><div className="results-content-media">{media?.type==='image'?<img src={media.url} alt="" loading="lazy"/>:<span className="results-media-fallback"><Icon name={media?.type==='video'?'play':'stack'}/></span>}<span className="results-platform-tag">{pretty(item.platform)}</span></div><div className="results-content-copy">{postLink?<a className="results-post-link" href={postLink} target="_blank" rel="noopener noreferrer" title="Open the original post on its platform">{item.title}</a>:<b>{item.title}</b>}<span>{pretty(item.format)} · {dateText(item.publishedAt||item.scheduledAt)}</span><div><small>Reach <strong>{full(item.metrics.reach)}</strong></small><small>Engagement <strong>{full(item.engagement)}</strong></small><small>Clicks <strong>{full(item.metrics.clicks)}</strong></small></div><footer><button type="button" onClick={()=>onOpen(item.id)}>View details</button>{postLink?<a href={postLink} target="_blank" rel="noopener noreferrer">View original post <span aria-hidden="true">↗</span></a>:<span className="results-link-unavailable">Original link unavailable</span>}</footer></div></article>;
+  const label={strong:'Strong',typical:'Typical',needs_attention:'Needs attention',insufficient:'Not enough data'}[item.performance?.label||'insufficient'];
+  return <article className="results-content-card"><div className="results-content-media">{media?.type==='image'?<img src={media.url} alt="" loading="lazy"/>:<span className="results-media-fallback"><Icon name={media?.type==='video'?'play':'stack'}/></span>}<span className="results-platform-tag">{pretty(item.platform)}</span></div><div className="results-content-copy">{postLink?<a className="results-post-link" href={postLink} target="_blank" rel="noopener noreferrer" title="Open the original post on its platform">{item.title}</a>:<b>{item.title}</b>}<span>{pretty(item.format)} · {dateText(item.publishedAt||item.scheduledAt)}</span><div><small>Reach <strong>{full(item.metrics.reach)}</strong></small><small>Engagement <strong>{full(item.engagement)}</strong></small><small>Clicks <strong>{full(item.metrics.clicks)}</strong></small></div><p className={'results-performance '+(item.performance?.label||'insufficient')}><b>{label}</b> · {item.performance?.summary||'Analytics are pending.'}{item.performance?.benchmark!=null&&<small> Post {item.performance.rate?.toFixed(2)}% · peer median {item.performance.benchmark.toFixed(2)}%</small>}</p><footer><button type="button" onClick={()=>onOpen(item.id)}>View details</button>{postLink?<a href={postLink} target="_blank" rel="noopener noreferrer">View original post <span aria-hidden="true">↗</span></a>:<span className="results-link-unavailable">Original link unavailable</span>}</footer>{canLearn&&item.status==='synced'&&(item.metrics.reach||0)>=20&&<button className="results-learn-button" type="button" disabled={learning} onClick={async()=>{setLearning(true);await onLearn(item.id);setLearning(false);}}>{learning?'Learning…':'Learn from this post'}</button>}</div></article>;
 }

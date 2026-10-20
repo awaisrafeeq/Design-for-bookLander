@@ -5,7 +5,7 @@ import type { StudioState } from '@/features/studio/types';
 export const dynamic = 'force-dynamic';
 type Context = { params: Promise<{ resource: string }> };
 const apiBase = process.env.BOOKLENDER_API_URL || 'http://127.0.0.1:8001/api/v1';
-const persistentResources = new Set(['brand', 'spend', 'team', 'posts', 'sources', 'catalogue', 'voices', 'library', 'logs', 'schedule', 'calendar', 'media', 'results']);
+const persistentResources = new Set(['brand', 'spend', 'team', 'posts', 'sources', 'catalogue', 'voices', 'library', 'logs', 'schedule', 'calendar', 'media', 'results', 'help', 'templates']);
 
 async function isAuthenticated(request: NextRequest) {
   const cookie = request.headers.get('cookie');

@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react';
 import { useStudio } from './StudioProvider';
 import { Icon } from './Icon';
-import { studioApi, type LibraryAsset, type Voices } from '../api';
+import { studioApi, type LibraryAsset, type Voices, type PostTemplates } from '../api';
 import type { Format, Platform, Post } from '../types';
 import { PUBLISHING_TARGETS } from '../publishing';
 
@@ -22,7 +22,11 @@ export function ContentEditor({ post, readOnly = false }: { post: Post; readOnly
   const [mediaBrief, setMediaBrief] = useState(post.mediaBrief || '');
   const [note, setNote] = useState(post.note || '');
   const [instruction, setInstruction] = useState('');
-  useEffect(() => { setCaption(post.caption || ''); setTags(post.tags || ''); setScript(post.script || ''); setVoiceAccent(post.voiceAccent || ''); setVideoDirection(post.videoDirection || ''); setMediaBrief(post.mediaBrief || ''); setNote(post.note || ''); }, [post.id, post.version, post.caption, post.tags, post.script, post.voiceAccent, post.videoDirection, post.mediaBrief, post.note]);
+  const [templates,setTemplates]=useState<PostTemplates|null>(null);
+  const [textTemplate,setTextTemplate]=useState(post.textTemplate||'standard');
+  const [videoTemplate,setVideoTemplate]=useState(post.videoTemplate||'editorial');
+  useEffect(()=>{void studioApi.get('templates').then(setTemplates).catch(()=>setTemplates(null));},[]);
+  useEffect(() => { setCaption(post.caption || ''); setTags(post.tags || ''); setScript(post.script || ''); setVoiceAccent(post.voiceAccent || ''); setVideoDirection(post.videoDirection || ''); setMediaBrief(post.mediaBrief || ''); setNote(post.note || ''); setTextTemplate(post.textTemplate||'standard'); setVideoTemplate(post.videoTemplate||'editorial'); }, [post.id, post.version, post.caption, post.tags, post.script, post.voiceAccent, post.videoDirection, post.mediaBrief, post.note, post.textTemplate, post.videoTemplate]);
   useEffect(() => {
     if (post.format !== 'video') return;
     let alive = true;
@@ -42,7 +46,7 @@ export function ContentEditor({ post, readOnly = false }: { post: Post; readOnly
   }
   async function generateMedia() {
     const version = dirty ? await save() : post.version || 1;
-    if (version !== null) await command('posts', {action:'generate-media',id:post.id,version});
+    if (version !== null) await command('posts', {action:'generate-media',id:post.id,version,videoTemplate});
   }
   return <section className="card pad sec content-editor">
     <b>{readOnly ? 'Saved content' : 'Content'}</b>
@@ -58,7 +62,7 @@ export function ContentEditor({ post, readOnly = false }: { post: Post; readOnly
       </select></label>{voiceError && <p className="small muted">{voiceError}</p>}
       {selectedVoice?.previewUrl && <div className="voice-preview"><span className="small">Hear {selectedVoice.name}'s sample</span><audio controls preload="none" src={selectedVoice.previewUrl}/></div>}
       <p className="small muted">Voice samples are supplied by Creatify. Save the draft or generate video to use the selected voice.</p></> : <label>Media brief<textarea rows={3} value={mediaBrief} readOnly={!can('content.edit')} onChange={event => setMediaBrief(event.target.value)} placeholder="Describe the image or carousel"/></label>}
-    {!readOnly && <><label>Instructions for AI <span className="muted">Optional</span><textarea rows={2} maxLength={1000} value={instruction} onChange={event => setInstruction(event.target.value)} placeholder="e.g. Make the caption shorter and focus on the book's money lesson"/></label><div className="editor-actions"><button className="btn" disabled={pending || !can('content.edit') || !caption.trim()} onClick={() => void save()}>{post.media?.length ? 'Save for review' : 'Save draft'}</button><button className="btn ai" disabled={pending || !can('content.generate') || !can('content.edit')} onClick={() => void command('posts', {action:post.caption ? 'revise' : 'generate',id:post.id,version:post.version,note:instruction,draft})}><Icon name="spark"/>{post.caption ? 'AI regenerate' : 'AI caption'}</button></div><p className="small muted">AI uses this draft and your optional instructions. Text-only drafts stay Selected until media is attached.</p>
+    {!readOnly && <><div className="editor-format"><label>Writing style<select value={textTemplate} onChange={event=>setTextTemplate(event.target.value)}>{(templates?.text||[{id:'standard',name:'Standard'}]).map(item=><option key={item.id} value={item.id}>{item.name}</option>)}</select></label>{post.format==='video'&&<label>Video style<select value={videoTemplate} onChange={event=>setVideoTemplate(event.target.value)}>{(templates?.video||[{id:'editorial',name:'Editorial b-roll'}]).map(item=><option key={item.id} value={item.id}>{item.name}</option>)}</select></label>}</div><p className="small muted">BookLender styles guide new AI output. Review every draft before approval.</p><label>Instructions for AI <span className="muted">Optional</span><textarea rows={2} maxLength={1000} value={instruction} onChange={event => setInstruction(event.target.value)} placeholder="e.g. Make the caption shorter and focus on the book's money lesson"/></label><div className="editor-actions"><button className="btn" disabled={pending || !can('content.edit') || !caption.trim()} onClick={() => void save()}>{post.media?.length ? 'Save for review' : 'Save draft'}</button><button className="btn ai" disabled={pending || !can('content.generate') || !can('content.edit')} onClick={() => void command('posts', {action:post.caption ? 'revise' : 'generate',id:post.id,version:post.version,note:instruction,draft,textTemplate})}><Icon name="spark"/>{post.caption ? 'AI regenerate' : 'AI caption'}</button></div><p className="small muted">AI uses this draft and your optional instructions. Text-only drafts stay Selected until media is attached.</p>
     <b>Media</b><label className="small">Upload from your computer<input type="file" accept={post.format === 'video' ? 'video/mp4,video/webm,video/quicktime' : 'image/jpeg,image/png,image/webp'} disabled={pending || !can('media.upload')} onChange={event => { const file = event.target.files?.[0]; if (file) void upload(post.id, post.version || 1, file); event.target.value = ''; }}/></label>
     <button className="btn ghost sm" disabled={pending || !can('media.upload')} onClick={()=>{if(libraryOpen){setLibraryOpen(false);return;}setLibraryOpen(true);setLibraryError('');void studioApi.library().then(result=>{setLibraryAssets(result.assets);setLibraryCursor(result.nextCursor)}).catch(error=>setLibraryError((error as Error).message));}}>Attach from library</button>
     {libraryOpen && <div><p className="small muted">Choose a saved {post.format==='video'?'video':'image'}.</p>{libraryError && <p role="alert">{libraryError}</p>}<div className="library-picker">{libraryAssets.filter(asset=>asset.type===(post.format==='video'?'video':'image')).map(asset=><button key={asset.id} disabled={pending} onClick={async()=>{if(await command('library',{action:'attach',assetId:asset.id,postId:post.id,version:post.version}))setLibraryOpen(false)}}>{asset.type==='video'?<video src={asset.url} preload="metadata"/>:<img src={asset.url} alt=""/>}<b>{asset.name}</b></button>)}</div>{libraryCursor && <button className="btn ghost sm" disabled={pending} onClick={()=>void studioApi.library(libraryCursor).then(result=>{setLibraryAssets(current=>[...current,...result.assets]);setLibraryCursor(result.nextCursor)}).catch(error=>setLibraryError((error as Error).message))}>Load more</button>}{!libraryAssets.length && !libraryCursor && !libraryError && <p className="small muted">No saved media. Upload one on Media library first.</p>}</div>}

@@ -25,6 +25,8 @@ export interface Post {
   voiceAccent?: string;
   videoDirection?: string;
   mediaBrief?: string;
+  textTemplate?: string;
+  videoTemplate?: string;
   tags?: string;
   warning?: string;
   note?: string;
