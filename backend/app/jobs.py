@@ -308,6 +308,8 @@ def execute_media(db, job, post):
         response = predis_result(job.provider_id, post.payload.get("format", "image"))
         if response and str(response.get("status", "")).lower() in {"error", "failed"}:
             raise ValueError("Predis image generation failed. Check the provider post and available credits, then retry.")
+        if response and response.get("credits_used") is not None:
+            job.result = {**(job.result or {}), "credits": response["credits_used"]}
         urls = response.get("urls", []) if response else []
         if not urls and response:
             urls = [entry.get("url") for entry in response.get("generated_media", [])

@@ -28,7 +28,6 @@ export const fallbackBook: Book = { id: 'team', title: 'Team topic', author: 'Bo
 export const getBook = (state: StudioState, id: string | null) => state.books[id || ''] || fallbackBook;
 export const money = (n: number) => '$' + n.toFixed(2);
 export const used = (state: StudioState) => state.spend.text + state.spend.video + state.spend.image;
-export const spendStatus = (state: StudioState) => used(state) >= state.spend.cap ? 'stop' : used(state) / state.spend.cap >= .8 ? 'near' : 'ok';
 export const atRisk = (post: Post) => !['published', 'archived', 'scheduled'].includes(post.stage) && post.eventDays != null && post.eventDays <= 3;
 export const byTime = (a: Post, b: Post) => ((a.day || 0) - (b.day || 0)) || String(a.time).localeCompare(String(b.time));
 export function formatEasternDate(value: string | Date) {

@@ -1,7 +1,7 @@
 import secrets
 import json
 from datetime import UTC, datetime, time, timedelta
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal
 from uuid import UUID, uuid4
 from zoneinfo import ZoneInfo
 
@@ -25,7 +25,7 @@ from app.providers import Zernio, creatify_voices, text_completion, parse_genera
 from app.publishing import PLATFORMS
 from app.source_feeds import configured_providers, source_events, source_feed_status
 from app.catalogue_admin import read_catalogue, read_catalogue_detail, mutate_catalogue
-from app.help_service import ARTICLES, ai_budget_available, answer_help
+from app.help_service import ARTICLES, answer_help
 
 router = APIRouter(prefix="/studio", tags=["studio settings"])
 
@@ -138,8 +138,6 @@ def mutate_brand(db: Session, user: User, request: Request, command: dict) -> di
             raise HTTPException(409, "Learning from this post is already saved")
         if not settings.openrouter_api_key or not settings.openrouter_model:
             raise HTTPException(503, "Configure OpenRouter before learning from a post")
-        if not ai_budget_available(db):
-            raise HTTPException(429, "Today's AI budget has been reached")
         schema = {"type": "object", "additionalProperties": False,
                   "properties": {"guidance": {"type": "string"}}, "required": ["guidance"]}
         instruction = ("Extract one concise reusable writing or visual style rule from the published post. "
@@ -365,28 +363,19 @@ def read_spend(db: Session) -> dict:
         day_end = datetime.combine(day + timedelta(days=1), time.min, tzinfo=zone).astimezone(UTC)
         total = db.scalar(select(func.coalesce(func.sum(SpendEntry.amount_usd), 0)).where(SpendEntry.created_at >= day_start, SpendEntry.created_at < day_end))
         week.append(float(total or 0))
-    return {"cap": float(cfg.daily_cap_usd), **totals, "efficientModel": cfg.efficient_model, "week": week, "timezone": cfg.timezone}
+    return {**totals, "efficientModel": cfg.efficient_model, "week": week, "timezone": cfg.timezone}
 
 
 def mutate_spend(db: Session, user: User, request: Request, command: dict) -> dict:
     require_permission(user, "spend.edit")
-    if command.get("key") not in {"cap", "efficientModel"}:
+    if command.get("key") != "efficientModel":
         raise HTTPException(status_code=422, detail="Unknown spend setting")
     cfg = db.scalar(select(SpendSettings).order_by(SpendSettings.updated_at.desc()).with_for_update())
     if cfg is None:
         raise HTTPException(status_code=503, detail="Spend settings have not been configured")
-    if command["key"] == "cap":
-        try:
-            cap = Decimal(str(command.get("value"))).quantize(Decimal("0.01"))
-        except (InvalidOperation, ValueError):
-            raise HTTPException(status_code=422, detail="Daily cap must be a valid dollar amount") from None
-        if not Decimal("1") <= cap <= Decimal("1000"):
-            raise HTTPException(status_code=422, detail="Daily cap must be between $1 and $1,000")
-        cfg.daily_cap_usd = cap
-    else:
-        if not isinstance(command.get("value"), bool):
-            raise HTTPException(status_code=422, detail="Efficient model setting must be true or false")
-        cfg.efficient_model = command["value"]
+    if not isinstance(command.get("value"), bool):
+        raise HTTPException(status_code=422, detail="Efficient model setting must be true or false")
+    cfg.efficient_model = command["value"]
     cfg.updated_by = user.id
     db.add(AuditEvent(actor_user_id=user.id, action="spend.settings_updated", resource_type="spend_settings", resource_id=str(cfg.id), request_id=request.headers.get("x-request-id"), details={"key": command["key"]}))
     db.commit()
@@ -885,6 +874,11 @@ def get_setting_resource(
     if resource == "brand":
         return read_brand(db)
     if resource == "spend":
+        if user.role != "admin" and "AI spend" not in (user.module_access or []):
+            raise HTTPException(403, "AI spend access required")
+        if request.query_params.get("detail") == "report":
+            from app.spend_report import read_spend_report
+            return read_spend_report(db)
         return read_spend(db)
     if resource == "team":
         return read_team(db, user)

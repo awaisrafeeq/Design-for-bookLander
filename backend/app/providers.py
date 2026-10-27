@@ -141,6 +141,7 @@ def text_completion(prompt: str, instruction: str, schema: dict | None = None):
     response = call("OpenRouter", "POST", "https://openrouter.ai/api/v1/chat/completions",
         headers={"Authorization": f"Bearer {settings.openrouter_api_key}"},
         json={"model": settings.openrouter_model, "max_tokens": 5000,
+              "usage": {"include": True},
               "provider": {"require_parameters": True},
               "plugins": [{"id": "response-healing"}],
               "response_format": {"type": "json_schema", "json_schema": {

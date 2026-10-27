@@ -26,7 +26,6 @@ function make(post: Post, revision = false) {
   if ((revision && post.stage !== 'review') || (!revision && post.stage !== 'selected')) throw new Error('Post is not ready for this action');
   if (revision && (post.version || 1) >= 3) throw new Error('3 versions used. Approve or reject this one.');
   const estimate = formats[post.format].cost + (state.spend.efficientModel ? .02 : .08);
-  if (used(state) + reserved + estimate > state.spend.cap) throw new Error('Daily AI limit reached. Raise it in AI spend, or wait until tomorrow.');
   reserved += estimate;
   post.stage = revision ? 'revision' : 'generating'; post.progress = 15;
   post.version = revision ? (post.version || 1) + 1 : 1;
@@ -55,7 +54,6 @@ export function mutateResource(resource: string, input: Command): { message?: st
     }
     if (input.action === 'generate-all') {
       const selected = state.posts.filter(post => post.stage === 'selected');
-      if (selected.reduce((sum, post) => sum + formats[post.format].cost + .08, 0) + used(state) + reserved > state.spend.cap) throw new Error('Daily AI limit reached. Raise it in AI spend.');
       selected.forEach(post => make(post)); return { message: `Generating ${selected.length} posts` };
     }
     const post = postById(Number(input.id));
@@ -99,8 +97,7 @@ export function mutateResource(resource: string, input: Command): { message?: st
     return {};
   }
   if (resource === 'spend') {
-    if (input.key === 'cap') state.spend.cap = Math.max(1, Math.min(50, Math.round(Number(input.value) || 1)));
-    else if (input.key === 'efficientModel') state.spend.efficientModel = Boolean(input.value);
+    if (input.key === 'efficientModel') state.spend.efficientModel = Boolean(input.value);
     return {};
   }
   if (resource === 'team') {

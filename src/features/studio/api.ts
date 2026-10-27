@@ -2,6 +2,8 @@ import type { Activity, Connection, Event, Post, Source, SourceProvider, TeamMem
 
 export type Dashboard = { posts: Post[]; spend: Spend; connections: Connection[]; activity: Activity[] };
 export type Spend = StudioState['spend'];
+export type SpendReport = {timezone:string;days:string[];providers:{OpenRouter:{usd:number;daily:number[];remainingUsd:number|null;balanceScope:string|null;usageTodayUsd:number|null;status:string};Predis:CreditProvider;Creatify:CreditProvider}};
+type CreditProvider = {credits:number;jobs:number;creditReports:number;daily:number[];dailyCredits:number[];remainingCredits:number|null;balanceStatus:string};
 export type Sources = { sources: Record<Source, boolean>; ideaLimits?: Record<Source, number>; ideaBacklog?: Record<Source, number>; connections: Connection[]; events: Event[]; providers?: Record<string, SourceProvider>; newsProvider?: 'currents' | 'newsdata'; accounts?: StudioState['accounts'] };
 export type Brand = StudioState['brand'];
 export type Results = ResultMetrics;
@@ -42,6 +44,12 @@ async function request<T>(resource: Resource, init?: RequestInit): Promise<T> {
 }
 export const studioApi = {
   get<K extends Resource>(resource: K): Promise<ResourceMap[K]> { return request<ResourceMap[K]>(resource); },
+  async spendReport():Promise<SpendReport>{
+    const response=await fetch(`${base}/spend?detail=report`,{cache:'no-store'});
+    const result=await response.json();
+    if(!response.ok)throw new Error(result.error||'Could not load AI usage');
+    return result as SpendReport;
+  },
   async campaignConnections(): Promise<CampaignConnections> {
     const response = await fetch(`${base}/campaigns?detail=connections`, {cache:'no-store'});
     const result = await response.json();

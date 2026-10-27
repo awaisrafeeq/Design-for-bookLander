@@ -24,6 +24,7 @@ class Settings(BaseSettings):
     booklender_timezone: str = "America/New_York"
     ai_daily_spend_cap_usd: float = 5.0
     openrouter_api_key: str = ""
+    openrouter_management_key: str = ""
     openrouter_model: str = ""
     zernio_api_key: str = ""
     zernio_profile_id: str = ""

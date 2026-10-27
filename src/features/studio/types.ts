@@ -79,7 +79,7 @@ export interface StudioState {
   accounts?: { id: string; platform: string; name: string; active: boolean; selected: boolean; syncedAt: string }[];
   posts: Post[];
   books: Record<string, Book>;
-  spend: { cap: number; text: number; video: number; image: number; efficientModel: boolean; week: number[] };
+  spend: { text: number; video: number; image: number; efficientModel: boolean; week: number[] };
   sources: Record<Source, boolean>;
   connections: Connection[];
   events: Event[];
