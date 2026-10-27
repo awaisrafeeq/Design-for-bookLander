@@ -146,6 +146,20 @@ def mutate_campaigns(db, user, command):
             return {"message": "Ad copy generated. Review it before saving.", "headline": headline[:180], "body": body[:5000]}
         except (ProviderError, ValueError, InvalidOperation) as exc:
             raise HTTPException(502, "Could not generate ad copy. Check OpenRouter and try again.") from exc
+    if action == "create-both":
+        require_permission(user, "campaigns.manage")
+        post = check_post(db, command.get("postId"))
+        rows = []
+        for platform in ("meta", "google"):
+            row = CampaignDraft(post_id=post.id, post_version=post.version, platform=platform,
+                                status="draft", payload=clean_payload(command.get("payload"), platform), created_by=user.id)
+            db.add(row)
+            db.flush()
+            db.add(AuditEvent(actor_user_id=user.id, action="campaign.create", resource_type="campaign_draft",
+                              resource_id=str(row.id), details={"platform": platform, "status": "draft"}))
+            rows.append(row)
+        db.commit()
+        return {"message": "Two campaign drafts saved. Review each budget separately.", "campaigns": [dto(row) for row in rows]}
     if action == "create":
         require_permission(user, "campaigns.manage")
         post = check_post(db, command.get("postId"))
