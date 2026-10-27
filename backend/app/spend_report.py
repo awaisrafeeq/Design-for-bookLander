@@ -8,7 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.config import settings
-from app.models import SpendEntry, WorkJob
+from app.models import SpendEntry, StudioPost, WorkJob
 
 
 def _number(value):
@@ -68,13 +68,47 @@ def _creatify_balance() -> dict:
     return {"remainingCredits": None, "balanceStatus": "unavailable"}
 
 
+def _historical_predis_credits(job: WorkJob, post: StudioPost | None) -> float | None:
+    """Estimate a legacy job only when its generated media can be recovered."""
+    if not post or not job.updated_at:
+        return None
+    snapshots = post.version_history or []
+    generation = []
+    for snapshot in snapshots:
+        if not isinstance(snapshot, dict):
+            continue
+        if snapshot.get("reason") != "AI media generated":
+            continue
+        try:
+            at = datetime.fromisoformat(snapshot["at"])
+            distance = abs((job.updated_at - at).total_seconds())
+        except (KeyError, TypeError, ValueError):
+            continue
+        if distance <= 300:
+            generation.append((distance, snapshot))
+    if not generation:
+        return None
+    snapshot = min(generation, key=lambda item: item[0])[1]
+    if not isinstance(snapshot.get("version"), int):
+        return None
+    output_version = snapshot["version"] + 1
+    if post.version == output_version:
+        media = (post.payload or {}).get("media")
+    else:
+        next_snapshot = next((item for item in snapshots if item.get("version") == output_version), None)
+        media = ((next_snapshot or {}).get("payload") or {}).get("media")
+    if not isinstance(media, list) or not media:
+        return None
+    return float(15 * len(media))
+
+
 def read_spend_report(db: Session) -> dict:
     zone = ZoneInfo(settings.booklender_timezone)
     today = datetime.now(zone).date()
     # Keep a full quarter available for the 7/30/90 day dashboard filter.
     first_day = today - timedelta(days=89)
     start = datetime.combine(first_day, time.min, tzinfo=zone).astimezone(UTC)
-    days = [(first_day + timedelta(days=offset)).isoformat() for offset in range(30)]
+    days = [(first_day + timedelta(days=offset)).isoformat() for offset in range(90)]
     daily = {name: defaultdict(float) for name in ("OpenRouter", "Predis", "Creatify")}
     daily_credits = {name: defaultdict(float) for name in ("Predis", "Creatify")}
     daily_estimated_credits = {"Predis": defaultdict(float)}
@@ -92,6 +126,10 @@ def read_spend_report(db: Session) -> dict:
     jobs = db.scalars(select(WorkJob).where(WorkJob.kind == "media",
                                              WorkJob.provider.in_(["Predis", "Creatify"]),
                                              WorkJob.updated_at >= start)).all()
+    legacy_post_ids = {job.post_id for job in jobs if job.provider == "Predis"
+                       and job.status == "completed" and getattr(job, "post_id", None)
+                       and _number((job.result or {}).get("credits")) is None}
+    legacy_posts = {post.id: post for post in db.scalars(select(StudioPost).where(StudioPost.id.in_(legacy_post_ids)))} if legacy_post_ids else {}
     for job in jobs:
         provider = job.provider
         result = job.result or {}
@@ -102,10 +140,12 @@ def read_spend_report(db: Session) -> dict:
         credits = [_number(result.get("credits"))]
         if provider == "Creatify":
             credits.append(_number(result.get("ttsCredits")))
+        elif provider == "Predis" and job.status == "completed" and credits[0] is None:
+            credits[0] = _historical_predis_credits(job, legacy_posts.get(getattr(job, "post_id", None)))
         known = [value for value in credits if value is not None]
         if known:
             amount = sum(known)
-            if result.get("creditsEstimated") and provider == "Predis":
+            if provider == "Predis" and (result.get("creditsEstimated") or result.get("credits") is None):
                 totals[provider]["estimatedCredits"] += amount
                 totals[provider]["estimatedCreditReports"] += 1
                 daily_estimated_credits[provider][day] += amount

@@ -5,10 +5,18 @@ from decimal import Decimal
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
-from app.spend_report import _creatify_balance, read_spend_report
+from app.spend_report import _creatify_balance, _historical_predis_credits, read_spend_report
 
 
 class SpendReportTests(unittest.TestCase):
+    def test_legacy_predis_estimate_uses_generated_media_count(self):
+        now = datetime.now(UTC)
+        job = SimpleNamespace(updated_at=now)
+        post = SimpleNamespace(version=4, payload={"media": [{"id": "a"}, {"id": "b"}]},
+                               version_history=[{"version": 3, "reason": "AI media generated",
+                                                 "at": now.isoformat(), "payload": {"media": []}}])
+        self.assertEqual(_historical_predis_credits(job, post), 30)
+
     def test_creatify_workspace_balance_uses_documented_response(self):
         response = MagicMock()
         response.json.return_value = {"remaining_credits": 123.5}
@@ -35,6 +43,7 @@ class SpendReportTests(unittest.TestCase):
         with patch("app.spend_report._openrouter_balance", return_value={"remainingUsd": 9.5}), \
              patch("app.spend_report._creatify_balance", return_value={"remainingCredits": 12, "balanceStatus": "ok"}):
             result = read_spend_report(db)
+        self.assertEqual(len(result["days"]), 90)
         providers = result["providers"]
         self.assertAlmostEqual(providers["OpenRouter"]["daily"][-1], 0.0123)
         self.assertEqual(providers["OpenRouter"]["remainingUsd"], 9.5)
