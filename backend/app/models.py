@@ -257,6 +257,20 @@ class Publication(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
+class CampaignDraft(Base):
+    __tablename__ = "campaign_drafts"
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    post_id: Mapped[int] = mapped_column(ForeignKey("studio_posts.id", ondelete="RESTRICT"), nullable=False, index=True)
+    post_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    platform: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
+    status: Mapped[str] = mapped_column(String(24), nullable=False, default="draft", index=True)
+    payload: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    created_by: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"))
+    reviewed_by: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())
+
+
 class PublicationAnalytics(Base):
     __tablename__ = "publication_analytics"
 

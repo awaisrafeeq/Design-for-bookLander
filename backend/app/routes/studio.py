@@ -53,11 +53,11 @@ ROLE_TO_API = {
     "viewer": "viewer",
 }
 ROLE_TO_LABEL = {value: key for key, value in ROLE_TO_API.items() if key[0].isupper()}
-MODULES = ["Board", "Ideas", "Review", "Schedule", "Results", "Sources", "Catalogue", "Brand", "AI spend", "Team", "Logs"]
+MODULES = ["Board", "Ideas", "Review", "Schedule", "Results", "Campaigns", "Sources", "Catalogue", "Brand", "AI spend", "Team", "Logs"]
 ROLE_MODULES = {
     "admin": MODULES,
-    "campaigns_manager": ["Board", "Ideas", "Review", "Schedule", "Results", "Sources", "Catalogue", "Brand", "AI spend", "Logs"],
-    "approver": ["Board", "Ideas", "Review", "Schedule", "Results", "Logs"],
+    "campaigns_manager": ["Board", "Ideas", "Review", "Schedule", "Results", "Campaigns", "Sources", "Catalogue", "Brand", "AI spend", "Logs"],
+    "approver": ["Board", "Ideas", "Review", "Schedule", "Results", "Campaigns", "Logs"],
     "editor": ["Board", "Ideas", "Schedule", "Sources", "Catalogue", "Brand", "Logs"],
     "viewer": ["Board", "Schedule", "Results"],
 }
@@ -890,6 +890,13 @@ def get_setting_resource(
         return read_team(db, user)
     if resource == "posts":
         return read_posts(db)
+    if resource == "campaigns":
+        if user.role != "admin" and "Campaigns" not in (user.module_access or []):
+            raise HTTPException(403, "Campaigns access required")
+        from app.campaigns import read_ad_connections, read_campaigns
+        if request.query_params.get("detail") == "connections":
+            return read_ad_connections()
+        return read_campaigns(db)
     if resource == "results":
         if user.role != "admin" and "Results" not in (user.module_access or []):
             raise HTTPException(403, "Results access required")
@@ -966,6 +973,9 @@ def post_setting_resource(
         return mutate_team(db, user, request, command)
     if resource == "posts":
         return mutate_post(db, user, request, command)
+    if resource == "campaigns":
+        from app.campaigns import mutate_campaigns
+        return mutate_campaigns(db, user, command)
     if resource == "results":
         if user.role != "admin" and "Results" not in (user.module_access or []):
             raise HTTPException(403, "Results access required")

@@ -15,9 +15,13 @@ export type VoiceOption = { id: string; name: string; gender: string; accent: st
 export type Voices = { voices: VoiceOption[]; defaultAccent: string };
 export type HelpArticles = { articles: {q:string;a:string}[] };
 export type HelpAnswer = { answer:string; sources:string[]; grounded:boolean };
+export type CampaignPayload = {name:string;goal:string;budgetType:string;budget:string;startDate:string;endDate:string;url:string;headline:string;body:string;keywords:string;audience:string;location:string;ageMin:number;ageMax:number;cta:string;platform:string};
+export type Campaign = {id:string;postId:number;postVersion:number;platform:'meta'|'google';status:'draft'|'review'|'approved';payload:CampaignPayload;createdAt:string;updatedAt:string;reviewedBy:string|null};
+export type Campaigns = {campaigns:Campaign[]};
+export type CampaignConnections = {connections:{platform:'meta'|'google';name:string;status:'available'|'no_accounts'|'access_denied'|'unavailable';accounts:{name:string;currency:string;selectable:boolean}[]}[]};
 export type LibraryAsset = { id: string; type: 'image' | 'video'; url: string; mime: string; size: number; name: string; createdAt: string };
 export type Library = { assets: LibraryAsset[]; nextCursor: string | null };
-export type ResourceMap = { snapshot: StudioState; dashboard: Dashboard; posts: Post[]; ideas: Post[]; review: Post[]; schedule: Post[]; calendar: Post[]; media: unknown; results: Results; sources: Sources; catalogue: Catalogue; voices: Voices; help: HelpArticles; library: Library; brand: Brand; spend: Spend; team: TeamMember[]; logs: Activity[] };
+export type ResourceMap = { snapshot: StudioState; dashboard: Dashboard; posts: Post[]; ideas: Post[]; review: Post[]; schedule: Post[]; calendar: Post[]; media: unknown; results: Results; campaigns: Campaigns; sources: Sources; catalogue: Catalogue; voices: Voices; help: HelpArticles; library: Library; brand: Brand; spend: Spend; team: TeamMember[]; logs: Activity[] };
 export type Resource = keyof ResourceMap;
 
 const base = process.env.NEXT_PUBLIC_STUDIO_API_BASE_URL || '/api/studio';
@@ -37,6 +41,12 @@ async function request<T>(resource: Resource, init?: RequestInit): Promise<T> {
 }
 export const studioApi = {
   get<K extends Resource>(resource: K): Promise<ResourceMap[K]> { return request<ResourceMap[K]>(resource); },
+  async campaignConnections(): Promise<CampaignConnections> {
+    const response = await fetch(`${base}/campaigns?detail=connections`, {cache:'no-store'});
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || 'Could not check ads connections');
+    return result as CampaignConnections;
+  },
   act<T = unknown>(resource: Resource, body: Record<string, unknown>): Promise<T> { return request<T>(resource, { method: 'POST', body: JSON.stringify(body) }); },
   upload(body: FormData): Promise<{ message: string }> { return request('media', { method: 'POST', body }); },
   uploadToLibrary(body: FormData): Promise<{ message: string }> { return request('library', { method: 'POST', body }); },

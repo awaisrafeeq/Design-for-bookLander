@@ -11,17 +11,18 @@ PERMISSIONS = {
     "spend.edit": "Change AI budget", "sources.manage": "Manage connections",
     "jobs.retry": "Retry background jobs", "logs.view": "View logs",
     "catalogue.manage": "Manage catalogue books",
+    "campaigns.manage": "Create and edit campaign drafts", "campaigns.approve": "Review campaign drafts",
 }
 DEFAULTS = {
     "admin": set(PERMISSIONS),
-    "campaigns_manager": {"ideas.create", "ideas.pick", "content.edit", "content.archive", "catalogue.manage"},
+    "campaigns_manager": {"ideas.create", "ideas.pick", "content.edit", "content.archive", "catalogue.manage", "campaigns.manage"},
     "editor": {"ideas.create", "content.edit", "media.upload", "catalogue.manage"},
-    "approver": {"review.approve"}, "viewer": set(),
+    "approver": {"review.approve", "campaigns.approve"}, "viewer": set(),
 }
 ACTION_MODULE = {
     "ideas": "Ideas", "content": "Board", "media": "Board", "review": "Review",
     "schedule": "Schedule", "publish": "Schedule", "brand": "Brand", "spend": "AI spend",
-    "sources": "Sources", "jobs": "Logs", "logs": "Logs", "catalogue": "Catalogue",
+    "sources": "Sources", "jobs": "Logs", "logs": "Logs", "catalogue": "Catalogue", "campaigns": "Campaigns",
 }
 
 
