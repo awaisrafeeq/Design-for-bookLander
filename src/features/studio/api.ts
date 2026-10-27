@@ -3,7 +3,7 @@ import type { Activity, Connection, Event, Post, Source, SourceProvider, TeamMem
 export type Dashboard = { posts: Post[]; spend: Spend; connections: Connection[]; activity: Activity[] };
 export type Spend = StudioState['spend'];
 export type SpendReport = {timezone:string;days:string[];providers:{OpenRouter:{usd:number;daily:number[];remainingUsd:number|null;balanceScope:string|null;usageTodayUsd:number|null;status:string};Predis:CreditProvider;Creatify:CreditProvider}};
-type CreditProvider = {credits:number;jobs:number;creditReports:number;daily:number[];dailyCredits:number[];remainingCredits:number|null;balanceStatus:string};
+type CreditProvider = {credits:number;jobs:number;creditReports:number;estimatedCredits:number;estimatedCreditReports:number;daily:number[];dailyCredits:number[];dailyEstimatedCredits:number[];remainingCredits:number|null;balanceStatus:string};
 export type Sources = { sources: Record<Source, boolean>; ideaLimits?: Record<Source, number>; ideaBacklog?: Record<Source, number>; connections: Connection[]; events: Event[]; providers?: Record<string, SourceProvider>; newsProvider?: 'currents' | 'newsdata'; accounts?: StudioState['accounts'] };
 export type Brand = StudioState['brand'];
 export type Results = ResultMetrics;

@@ -71,12 +71,15 @@ def _creatify_balance() -> dict:
 def read_spend_report(db: Session) -> dict:
     zone = ZoneInfo(settings.booklender_timezone)
     today = datetime.now(zone).date()
-    first_day = today - timedelta(days=29)
+    # Keep a full quarter available for the 7/30/90 day dashboard filter.
+    first_day = today - timedelta(days=89)
     start = datetime.combine(first_day, time.min, tzinfo=zone).astimezone(UTC)
     days = [(first_day + timedelta(days=offset)).isoformat() for offset in range(30)]
     daily = {name: defaultdict(float) for name in ("OpenRouter", "Predis", "Creatify")}
     daily_credits = {name: defaultdict(float) for name in ("Predis", "Creatify")}
-    totals = {name: {"usd": 0.0, "credits": 0.0, "jobs": 0, "creditReports": 0}
+    daily_estimated_credits = {"Predis": defaultdict(float)}
+    totals = {name: {"usd": 0.0, "credits": 0.0, "creditReports": 0,
+                     "estimatedCredits": 0.0, "estimatedCreditReports": 0, "jobs": 0}
               for name in daily}
 
     for entry in db.scalars(select(SpendEntry).where(SpendEntry.created_at >= start,
@@ -101,9 +104,15 @@ def read_spend_report(db: Session) -> dict:
             credits.append(_number(result.get("ttsCredits")))
         known = [value for value in credits if value is not None]
         if known:
-            totals[provider]["credits"] += sum(known)
-            totals[provider]["creditReports"] += 1
-            daily_credits[provider][day] += sum(known)
+            amount = sum(known)
+            if result.get("creditsEstimated") and provider == "Predis":
+                totals[provider]["estimatedCredits"] += amount
+                totals[provider]["estimatedCreditReports"] += 1
+                daily_estimated_credits[provider][day] += amount
+            else:
+                totals[provider]["credits"] += amount
+                totals[provider]["creditReports"] += 1
+                daily_credits[provider][day] += amount
 
     return {
         "timezone": settings.booklender_timezone,
@@ -113,6 +122,7 @@ def read_spend_report(db: Session) -> dict:
                            **_openrouter_balance()},
             "Predis": {**totals["Predis"], "daily": [daily["Predis"][day] for day in days],
                        "dailyCredits": [daily_credits["Predis"][day] for day in days],
+                       "dailyEstimatedCredits": [daily_estimated_credits["Predis"][day] for day in days],
                        "remainingCredits": None, "balanceStatus": "not_available"},
             "Creatify": {**totals["Creatify"], "daily": [daily["Creatify"][day] for day in days],
                          "dailyCredits": [daily_credits["Creatify"][day] for day in days],
