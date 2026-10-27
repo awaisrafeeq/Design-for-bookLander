@@ -49,6 +49,25 @@ def _openrouter_balance() -> dict:
     return balance
 
 
+def _creatify_balance() -> dict:
+    """Read the documented Workspace credit balance without guessing from plan size."""
+    if not settings.creatify_api_id or not settings.creatify_api_key:
+        return {"remainingCredits": None, "balanceStatus": "not_configured"}
+    try:
+        with httpx.Client(timeout=8) as client:
+            response = client.get("https://api.creatify.ai/api/remaining_credits/", headers={
+                "X-API-ID": settings.creatify_api_id,
+                "X-API-KEY": settings.creatify_api_key,
+            })
+            response.raise_for_status()
+            remaining = _number(response.json().get("remaining_credits"))
+            if remaining is not None:
+                return {"remainingCredits": remaining, "balanceStatus": "ok"}
+    except (httpx.HTTPError, ValueError, TypeError, AttributeError):
+        pass
+    return {"remainingCredits": None, "balanceStatus": "unavailable"}
+
+
 def read_spend_report(db: Session) -> dict:
     zone = ZoneInfo(settings.booklender_timezone)
     today = datetime.now(zone).date()
@@ -97,6 +116,6 @@ def read_spend_report(db: Session) -> dict:
                        "remainingCredits": None, "balanceStatus": "not_available"},
             "Creatify": {**totals["Creatify"], "daily": [daily["Creatify"][day] for day in days],
                          "dailyCredits": [daily_credits["Creatify"][day] for day in days],
-                         "remainingCredits": None, "balanceStatus": "not_available"},
+                         **_creatify_balance()},
         },
     }
