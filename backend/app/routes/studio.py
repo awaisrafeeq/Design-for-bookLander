@@ -893,9 +893,15 @@ def get_setting_resource(
     if resource == "campaigns":
         if user.role != "admin" and "Campaigns" not in (user.module_access or []):
             raise HTTPException(403, "Campaigns access required")
-        from app.campaigns import read_ad_connections, read_campaigns
+        from app.campaigns import read_ad_connections, read_ads_timeline, read_campaigns
         if request.query_params.get("detail") == "connections":
             return read_ad_connections()
+        if request.query_params.get("detail") == "analytics":
+            return read_ads_timeline(request.query_params.get("platform", ""),
+                                     request.query_params.get("accountId", ""),
+                                     request.query_params.get("adAccountId", ""),
+                                     request.query_params.get("fromDate", ""),
+                                     request.query_params.get("toDate", ""))
         return read_campaigns(db)
     if resource == "results":
         if user.role != "admin" and "Results" not in (user.module_access or []):

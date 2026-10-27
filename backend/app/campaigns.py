@@ -42,21 +42,66 @@ def read_ad_connections():
         if not account_id:
             continue
         platform = str(item["platform"]).lower()
-        entry = {"platform": "google" if platform == "googleads" else "meta",
+        entry = {"platform": "google" if platform == "googleads" else "meta", "accountId": account_id,
                  "name": str(item.get("displayName") or item.get("username") or platform),
                  "status": "unavailable", "accounts": []}
         try:
             response = provider.request("GET", "/ads/accounts", params={"accountId": account_id}, timeout=15)
             accounts = response.get("accounts") or []
-            entry["accounts"] = [{"name": str(account.get("name") or "Ad account"),
+            entry["accounts"] = [{"id": str(account.get("id") or ""), "name": str(account.get("name") or "Ad account"),
                                   "currency": str(account.get("currency") or ""),
-                                  "selectable": account.get("selectable") is not False}
+                                  "selectable": account.get("selectable") is not False,
+                                  "unusableReason": str(account.get("unusableReason") or "")}
                                  for account in accounts if isinstance(account, dict)]
             entry["status"] = "available" if any(account["selectable"] for account in entry["accounts"]) else "no_accounts"
         except ProviderError as exc:
             entry["status"] = "access_denied" if exc.status in {401, 403} else "unavailable"
         result.append(entry)
     return {"connections": result}
+
+
+def read_ads_timeline(platform, account_id, ad_account_id, from_date, to_date):
+    if platform not in {"meta", "google"} or not account_id or not ad_account_id:
+        raise HTTPException(422, "Choose an ads account first.")
+    try:
+        start = date.fromisoformat(from_date)
+        end = date.fromisoformat(to_date)
+        if end < start or (end - start).days >= 90 or end > datetime.now(UTC).date():
+            raise ValueError()
+    except (TypeError, ValueError):
+        raise HTTPException(422, "Choose a valid period ending today or earlier.") from None
+    provider = Zernio()
+    try:
+        accounts = provider.accounts()
+        account = next((item for item in accounts if isinstance(item, dict)
+                        and str(item.get("_id") or item.get("id") or "") == account_id
+                        and (str(item.get("platform") or "").lower() in ({"googleads"} if platform == "google" else {"facebook", "instagram", "metaads"}))
+                        and item.get("isActive") is not False), None)
+        if not account:
+            raise HTTPException(404, "This Zernio ads connection is no longer available.")
+        available = provider.request("GET", "/ads/accounts", params={"accountId": account_id}, timeout=20).get("accounts") or []
+        if not any(isinstance(item, dict) and str(item.get("id") or "") == ad_account_id and item.get("selectable") is not False for item in available):
+            raise HTTPException(403, "This ad account is not available to the selected Zernio connection.")
+        params = {"accountId": account_id, "adAccountId": ad_account_id,
+                  "fromDate": start.isoformat(), "toDate": end.isoformat(),
+                  "platform": "google" if platform == "google" else "facebook"}
+        result = provider.request("GET", "/ads/timeline", params=params, timeout=30)
+        rows = result.get("rows")
+        if not isinstance(rows, list):
+            raise ProviderError("Zernio", operation="ads timeline")
+        currency = next((str(item.get("currency") or "") for item in available
+                         if isinstance(item, dict) and str(item.get("id") or "") == ad_account_id), "")
+        return {"rows": [item for item in rows if isinstance(item, dict)],
+                "backfillPending": bool(result.get("backfillPending")),
+                "platform": platform, "currency": currency}
+    except ProviderError as exc:
+        if exc.status == 202:
+            return {"rows": [], "backfillPending": True, "platform": platform, "currency": ""}
+        if exc.status == 403:
+            raise HTTPException(403, "Zernio could not read this account's ad reporting. Check Ads access and billing.") from exc
+        if exc.status == 429:
+            raise HTTPException(429, "Zernio rate limit reached. Wait briefly, then refresh again.") from exc
+        raise HTTPException(502, "Could not load ad reporting from Zernio. Check the account connection and retry.") from exc
 
 
 def clean_payload(raw, platform):

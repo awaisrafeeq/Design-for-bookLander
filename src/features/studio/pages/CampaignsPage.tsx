@@ -1,6 +1,6 @@
 'use client';
 import { useCallback, useEffect, useState } from 'react';
-import { studioApi, type Campaign, type CampaignPayload, type CampaignConnections } from '../api';
+import { studioApi, type Campaign, type CampaignPayload, type CampaignConnections, type CampaignAdTimeline } from '../api';
 import { useStudio } from '../components/StudioProvider';
 import { Icon } from '../components/Icon';
 
@@ -26,6 +26,9 @@ export default function CampaignsPage() {
   const [instructions,setInstructions]=useState('');
   const [connections,setConnections]=useState<CampaignConnections | null>(null);
   const [checking,setChecking]=useState(false);
+  const [selectedAdsAccount,setSelectedAdsAccount]=useState('');
+  const [analytics,setAnalytics]=useState<CampaignAdTimeline|null>(null);
+  const [syncing,setSyncing]=useState(false);
   const canManage=Boolean(state.permissions?.['campaigns.manage']);
   const canApprove=Boolean(state.permissions?.['campaigns.approve']);
   const approved=state.posts.filter(post=>['review','scheduled','published'].includes(post.stage) && post.approvedVersion === post.version && post.media?.length);
@@ -59,13 +62,45 @@ export default function CampaignsPage() {
       setForm(current=>({...current,headline:result.headline,body:result.body}));notify(result.message);
     } catch(error){notify((error as Error).message,true);} finally{setBusy(false);}
   };
-  const checkConnections=async()=>{setChecking(true);try{setConnections(await studioApi.campaignConnections());}catch(error){notify((error as Error).message,true);}finally{setChecking(false);}};
+  const checkConnections=useCallback(async()=>{setChecking(true);try{setConnections(await studioApi.campaignConnections());}catch(error){notify((error as Error).message,true);}finally{setChecking(false);}},[notify]);
+  useEffect(()=>{void checkConnections();},[checkConnections]);
+  const adOptions=(connections?.connections||[]).filter(item=>item.platform===tab&&item.status==='available')
+    .flatMap(connection=>connection.accounts.filter(account=>account.selectable&&account.id).map(account=>({
+      key:`${connection.accountId}::${account.id}`,connectionId:connection.accountId,adAccountId:account.id,
+      name:account.name,connectionName:connection.name,currency:account.currency,platform:connection.platform
+    })));
+  const activeAdOption=adOptions.find(item=>item.key===selectedAdsAccount)||null;
+  useEffect(()=>{
+    if(!adOptions.length){setSelectedAdsAccount('');setAnalytics(null);return;}
+    if(!adOptions.some(item=>item.key===selectedAdsAccount))setSelectedAdsAccount(adOptions[0].key);
+  },[tab,connections,selectedAdsAccount]);
+  const refreshAnalytics=useCallback(async(option:typeof activeAdOption,days:number)=>{
+    if(!option)return;
+    setSyncing(true);
+    try{
+      const end=new Date();const start=new Date(end);start.setDate(start.getDate()-(days-1));
+      const iso=(value:Date)=>value.toISOString().slice(0,10);
+      const data=await studioApi.campaignAnalytics({platform:option.platform,accountId:option.connectionId,adAccountId:option.adAccountId,fromDate:iso(start),toDate:iso(end)});
+      setAnalytics(data);
+    }catch(error){setAnalytics(null);notify((error as Error).message,true);}
+    finally{setSyncing(false);}
+  },[notify]);
+  useEffect(()=>{if(activeAdOption)void refreshAnalytics(activeAdOption,period);else setAnalytics(null);},[selectedAdsAccount,tab,period,connections]);
   const change=async(name:string)=>{if(!selected)return;const result=await action({action:name,id:selected.id});if(result){setSelected(result);if(name==='archive')setView('list');}};
   const count=(status:string)=>campaigns.filter(item=>item.status===status).length;
   const money=(p:CampaignPayload)=>p.budget ? `$${Number(p.budget).toLocaleString()} ${p.budgetType==='daily'?'per day':'total'}` : 'Not set';
   const thumb=post?.media?.find(item=>item.type==='image');
   const preview=(item:typeof post)=>item?.media?.find(asset=>asset.type==='image')?.url;
   const queue=campaigns.filter(item=>item.status==='review');
+  const sumMetric=(key:'spend'|'conversions'|'impressions'|'reach'|'clicks'|'purchaseValue')=>(analytics?.rows||[]).reduce((sum,row)=>sum+(typeof row[key]==='number'?row[key] as number:0),0);
+  const totals={spend:sumMetric('spend'),conversions:sumMetric('conversions'),impressions:sumMetric('impressions'),reach:sumMetric('reach'),clicks:sumMetric('clicks'),purchaseValue:sumMetric('purchaseValue')};
+  const ctr=totals.impressions?totals.clicks/totals.impressions*100:0;
+  const cpc=totals.clicks?totals.spend/totals.clicks:0;
+  const cpm=totals.impressions?totals.spend/totals.impressions*1000:0;
+  const costPerResult=totals.conversions?totals.spend/totals.conversions:0;
+  const roas=totals.spend?totals.purchaseValue/totals.spend:0;
+  const currency=analytics?.currency||activeAdOption?.currency||'USD';
+  const formatMoney=(value:number)=>{try{return new Intl.NumberFormat('en-US',{style:'currency',currency,maximumFractionDigits:2}).format(value);}catch{return `$${value.toFixed(2)}`;}};
 
   if(view==='edit') return <div className="campaign-page">
     <button className="campaign-back" onClick={()=>setView(editing?'detail':'list')}>Campaigns &nbsp;›&nbsp; {editing?'Edit plan':'New campaign'}</button>
@@ -96,13 +131,14 @@ export default function CampaignsPage() {
 
   const filtered=campaigns.filter(item=>item.platform===tab);
   return <div className="campaign-page campaign-dashboard">
+    <div className="campaign-account-toolbar"><label><span>Ad account</span><select value={selectedAdsAccount} disabled={!adOptions.length||checking} onChange={event=>setSelectedAdsAccount(event.target.value)}><option value="">{checking?'Loading accounts…':adOptions.length?'Choose an account':`No usable ${network(tab)} ad account`}</option>{adOptions.map(option=><option key={option.key} value={option.key}>{option.connectionName} · {option.name}{option.currency?` · ${option.currency}`:''}</option>)}</select></label><span className="campaign-account-caption">{activeAdOption?activeAdOption.name:'Select a connected advertising account'}</span><button className="btn ghost sm" disabled={!activeAdOption||syncing} onClick={()=>activeAdOption&&void refreshAnalytics(activeAdOption,period)}>{syncing?'Syncing…':'Sync analytics'}</button></div>
     <div className="campaign-notice"><Icon name="plug"/><span>Campaign plans are saved in BookLender. Live ad delivery and reporting are pending.{connections&&<span className="campaign-connection-result">{connections.connections.length ? connections.connections.map((item,index)=><span key={index}><b>{item.name} · {network(item.platform)}:</b> {item.status==='available'?`${item.accounts.filter(a=>a.selectable).length} ad account(s) available`:item.status==='no_accounts'?'No usable ad account found':item.status==='access_denied'?'Ads access denied':'Could not verify'}.</span>) : 'No Meta or Google Ads connections found.'}</span>}</span><button className="btn ghost sm" disabled={checking} onClick={()=>void checkConnections()}>{checking?'Checking…':'Check ads connections'}</button></div>
     <div className="campaign-title"><div><h2><em>{queue.length} {queue.length===1?'campaign waits':'campaigns wait'} for approval.</em> {campaigns.length} plans in BookLender.</h2><p>Review campaign plans from approved posts.</p></div>{canManage&&<button className="btn" onClick={newDraft}><Icon name="spark"/> New campaign from a post</button>}</div>
     {queue.length>0&&<section className="campaign-approval"><header><Icon name="eye"/><b>{queue.length} {queue.length===1?'campaign needs':'campaigns need'} approval.</b><span>Approval confirms the plan; it does not start ad spend.</span></header>{queue.map(item=>{const source=state.posts.find(p=>p.id===item.postId);const image=preview(source);return <div className="campaign-approval-row" key={item.id}>{image?<img src={image} alt=""/>:<span className="campaign-media-fallback"><Icon name="image"/></span>}<div><b>{item.payload.name}</b><small>{network(item.platform)} · {showDate(item.payload.startDate)} – {showDate(item.payload.endDate)} · {money(item.payload)}</small></div><button className="btn sm" onClick={()=>{setSelected(item);setView('detail');}}>Review</button></div>})}</section>}
     <div className="campaign-bar"><div className="campaign-tabs">{(['meta','google'] as const).map(item=><button key={item} className={tab===item?'on':''} onClick={()=>setTab(item)}><span className={`campaign-platform-mark ${item}`}>{item==='meta'?'M':'G'}</span>{network(item)}</button>)}</div><div className="campaign-periods">{([7,30,90] as const).map(days=><button key={days} className={period===days?'on':''} onClick={()=>setPeriod(days)}>{days} days</button>)}</div></div>
-    <div className="campaign-metrics">{(tab==='meta'?['Spend','Results','Cost per result','CTR (link)','CPM','ROAS']:['Spend','Conversions','Cost per conversion','CTR','Avg. CPC','ROAS']).map(metric=><div className="card campaign-metric" key={metric}><span>{metric}</span><b>—</b><small>Awaiting live ads data</small></div>)}</div>
-    <div className="card campaign-secondary">{(tab==='meta'?['Reach','Impressions','Frequency','CPC (link)']:['Impressions','Clicks','Conversion rate','Impression share']).map(metric=><div key={metric}><span>{metric}</span><b>—</b></div>)}</div>
-    <section className="card campaign-chart"><h3>{tab==='meta'?'Spend and results by day':'Spend and conversions by day'}</h3><p>{network(tab)} · last {period} days</p><div className="campaign-chart-body"><div className="campaign-chart-grid"/><div className="campaign-chart-message"><Icon name="chart"/><b>Performance data is not available yet</b><span>Live daily spend and results will appear after ads reporting is integrated.</span></div></div></section>
+    <div className="campaign-metrics">{(tab==='meta'?[['Spend',formatMoney(totals.spend)],['Results',totals.conversions.toLocaleString()],['Cost per result',totals.conversions?formatMoney(costPerResult):'—'],['CTR (link)',`${ctr.toFixed(2)}%`],['CPM',formatMoney(cpm)],['ROAS',roas?`${roas.toFixed(2)}×`:'—']]:[['Spend',formatMoney(totals.spend)],['Conversions',totals.conversions.toLocaleString()],['Cost per conversion',totals.conversions?formatMoney(costPerResult):'—'],['CTR',`${ctr.toFixed(2)}%`],['Avg. CPC',formatMoney(cpc)],['ROAS',roas?`${roas.toFixed(2)}×`:'—']]).map(([metric,value])=><div className="card campaign-metric" key={metric}><span>{metric}</span><b>{syncing?'…':analytics?.rows.length?value:'—'}</b><small>{analytics?.rows.length?`${network(tab)} · last ${period} days`:analytics?.backfillPending?'Zernio backfill in progress':activeAdOption?'No reporting rows for this period':'Select an ad account to sync'}</small></div>)}</div>
+    <div className="card campaign-secondary">{(tab==='meta'?[['Reach',totals.reach.toLocaleString()],['Impressions',totals.impressions.toLocaleString()],['Frequency',totals.reach?(totals.impressions/totals.reach).toFixed(2):'—'],['CPC (link)',formatMoney(cpc)]]:[['Impressions',totals.impressions.toLocaleString()],['Clicks',totals.clicks.toLocaleString()],['Conversion rate',totals.clicks?`${(totals.conversions/totals.clicks*100).toFixed(2)}%`:'—'],['Impression share','—']]).map(([metric,value])=><div key={metric}><span>{metric}</span><b>{analytics?.rows.length?value:'—'}</b></div>)}</div>
+    <section className="card campaign-chart"><h3>{tab==='meta'?'Spend and results by day':'Spend and conversions by day'}</h3><p>{activeAdOption?`${activeAdOption.name} · last ${period} days`:'Select an account to view daily activity'}</p><div className="campaign-chart-body"><div className="campaign-chart-grid"/>{analytics?.rows.length?<div className="campaign-daily-bars">{analytics.rows.map(row=><div className="campaign-daily-column" key={row.date} title={`${row.date} · ${formatMoney(row.spend||0)} · ${row.conversions||0} results`}><i style={{height:`${Math.max(2,Math.min(100,(row.spend||0)/Math.max(1,...analytics.rows.map(item=>item.spend||0))*100))}%`}}/><span>{new Date(`${row.date}T12:00:00`).toLocaleDateString('en-US',{month:'short',day:'numeric'})}</span></div>)}</div>:<div className="campaign-chart-message"><Icon name="chart"/><b>{syncing?'Syncing account analytics…':analytics?.backfillPending?'Historical data is still syncing':'No ad performance data yet'}</b><span>{analytics?.backfillPending?'Zernio is importing this account’s history. Refresh again after it completes.':'Choose an ad account and sync its latest reporting from Zernio.'}</span></div>}</div></section>
     <section className="campaign-table-section"><div className="campaign-list-head"><h3>{network(tab)} campaigns</h3><span className="small muted">{filtered.length} {filtered.length===1?'plan':'plans'}</span></div><div className="card campaign-list">{loading?<p className="muted">Loading campaigns…</p>:filtered.length?<div className="tblwrap"><table className="tbl"><thead><tr><th>Campaign</th><th>Status</th><th>Dates</th><th>Budget</th><th>Results</th><th>Cost / result</th><th>CTR</th><th></th></tr></thead><tbody>{filtered.map(item=>{const source=state.posts.find(p=>p.id===item.postId);const image=preview(source);return <tr key={item.id}><td><div className="campaign-table-name">{image?<img src={image} alt=""/>:<span className="campaign-media-fallback"><Icon name="image"/></span>}<span><b>{item.payload.name}</b><small>From post · {source?.title||'Approved post'}</small></span></div></td><td><span className={`chip ${item.status==='review'?'amber':item.status==='approved'?'green':''}`}>{label(item.status)}</span></td><td>{showDate(item.payload.startDate)} – {showDate(item.payload.endDate)}</td><td>{money(item.payload)}</td><td>—</td><td>—</td><td>—</td><td><button className={`btn ${item.status==='review'?'':'ghost'} sm`} onClick={()=>{setSelected(item);setView('detail');}}>{item.status==='review'?'Review':'View'}</button></td></tr>})}</tbody></table></div>:<div className="campaign-empty"><Icon name="flag"/><b>No {network(tab)} campaign plans yet</b><span>Create a campaign from an approved post to get started.</span></div>}</div></section>
   </div>;
 }

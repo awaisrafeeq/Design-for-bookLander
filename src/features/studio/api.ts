@@ -18,7 +18,8 @@ export type HelpAnswer = { answer:string; sources:string[]; grounded:boolean };
 export type CampaignPayload = {name:string;goal:string;budgetType:string;budget:string;startDate:string;endDate:string;url:string;headline:string;body:string;keywords:string;audience:string;location:string;ageMin:number;ageMax:number;cta:string;platform:string};
 export type Campaign = {id:string;postId:number;postVersion:number;platform:'meta'|'google';status:'draft'|'review'|'approved';payload:CampaignPayload;createdAt:string;updatedAt:string;reviewedBy:string|null};
 export type Campaigns = {campaigns:Campaign[]};
-export type CampaignConnections = {connections:{platform:'meta'|'google';name:string;status:'available'|'no_accounts'|'access_denied'|'unavailable';accounts:{name:string;currency:string;selectable:boolean}[]}[]};
+export type CampaignConnections = {connections:{platform:'meta'|'google';accountId:string;name:string;status:'available'|'no_accounts'|'access_denied'|'unavailable';accounts:{id:string;name:string;currency:string;selectable:boolean;unusableReason?:string}[]}[]};
+export type CampaignAdTimeline = {rows:{date:string;currency?:string;spend?:number;impressions?:number;reach?:number;clicks?:number;ctr?:number;cpc?:number;cpm?:number;conversions?:number;allConversions?:number;costPerConversion?:number;purchaseValue?:number;roas?:number}[];backfillPending:boolean;platform:'meta'|'google';currency:string};
 export type LibraryAsset = { id: string; type: 'image' | 'video'; url: string; mime: string; size: number; name: string; createdAt: string };
 export type Library = { assets: LibraryAsset[]; nextCursor: string | null };
 export type ResourceMap = { snapshot: StudioState; dashboard: Dashboard; posts: Post[]; ideas: Post[]; review: Post[]; schedule: Post[]; calendar: Post[]; media: unknown; results: Results; campaigns: Campaigns; sources: Sources; catalogue: Catalogue; voices: Voices; help: HelpArticles; library: Library; brand: Brand; spend: Spend; team: TeamMember[]; logs: Activity[] };
@@ -46,6 +47,13 @@ export const studioApi = {
     const result = await response.json();
     if (!response.ok) throw new Error(result.error || 'Could not check ads connections');
     return result as CampaignConnections;
+  },
+  async campaignAnalytics(filters:{platform:string;accountId:string;adAccountId:string;fromDate:string;toDate:string}):Promise<CampaignAdTimeline>{
+    const query=new URLSearchParams({...filters,detail:'analytics'});
+    const response=await fetch(`${base}/campaigns?${query}`,{cache:'no-store'});
+    const result=await response.json();
+    if(!response.ok)throw new Error(result.error||'Could not sync ad account analytics');
+    return result as CampaignAdTimeline;
   },
   act<T = unknown>(resource: Resource, body: Record<string, unknown>): Promise<T> { return request<T>(resource, { method: 'POST', body: JSON.stringify(body) }); },
   upload(body: FormData): Promise<{ message: string }> { return request('media', { method: 'POST', body }); },

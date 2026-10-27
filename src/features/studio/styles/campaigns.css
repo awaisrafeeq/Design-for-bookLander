@@ -73,3 +73,13 @@
 @media(max-width:1200px){.campaign-metrics{grid-template-columns:repeat(3,minmax(0,1fr))}.campaign-editor .campaign-post-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:900px){.campaign-editor .campaign-create{grid-template-columns:1fr}.campaign-editor .campaign-rail{position:static}.campaign-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:650px){.campaign-dashboard .campaign-title{align-items:stretch}.campaign-approval header{flex-wrap:wrap}.campaign-bar{align-items:flex-start;flex-direction:column}.campaign-secondary{grid-template-columns:repeat(2,minmax(0,1fr))}.campaign-secondary>div:nth-child(2){border-right:0}.campaign-secondary>div:nth-child(-n+2){border-bottom:1px solid var(--line2)}.campaign-editor .campaign-post-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.campaign-editor .campaign-options{grid-template-columns:1fr}.campaign-dashboard .campaign-notice{flex-wrap:wrap}.campaign-dashboard .campaign-notice .btn{margin-left:0}}
+.campaign-account-toolbar{display:flex;align-items:end;gap:12px;flex-wrap:wrap;padding:12px 14px;background:var(--surf);border:1px solid var(--line);border-radius:var(--r3)}
+.campaign-account-toolbar label{display:flex;flex-direction:column;gap:4px;min-width:min(340px,100%);font-size:11px;color:var(--mute);font-weight:600}
+.campaign-account-toolbar select{min-height:36px;padding:6px 30px 6px 10px;border:1px solid var(--line);border-radius:var(--r2);background:var(--surf);color:var(--ink);font:inherit;font-size:13px}
+.campaign-account-caption{color:var(--mute);font-size:12px;padding-bottom:8px;flex:1}
+.campaign-sync-note{display:block;color:var(--need);margin-top:4px}
+.campaign-daily-bars{position:absolute;inset:8px 8px 30px;display:flex;align-items:stretch;justify-content:space-around;gap:4px}
+.campaign-daily-column{position:relative;display:flex;flex:1;min-width:5px;max-width:40px;align-items:center;justify-content:flex-end;flex-direction:column}
+.campaign-daily-column i{display:block;width:min(72%,24px);min-height:2px;border-radius:3px 3px 0 0;background:color-mix(in srgb,var(--brand) 34%,var(--brandsoft))}
+.campaign-daily-column span{position:absolute;top:calc(100% + 7px);max-width:52px;overflow:hidden;color:var(--mute);font-size:9px;white-space:nowrap;text-overflow:ellipsis}
+@media(max-width:650px){.campaign-account-toolbar{align-items:stretch;flex-direction:column}.campaign-account-toolbar label{min-width:0}.campaign-account-caption{padding:0}}
