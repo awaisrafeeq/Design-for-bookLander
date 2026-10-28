@@ -34,14 +34,19 @@ class SpendReportTests(unittest.TestCase):
     def test_aggregates_provider_units_without_inventing_missing_credits(self):
         now = datetime.now(UTC)
         db = MagicMock()
+        jobs = MagicMock()
+        jobs.all.return_value = [
+            SimpleNamespace(provider="Predis", post_id=None, updated_at=now, status="completed", result={}),
+            SimpleNamespace(provider="Creatify", updated_at=now, status="completed",
+                            result={"credits": 5, "ttsCredits": 2}),
+        ]
         db.scalars.side_effect = [
             [SimpleNamespace(provider="OpenRouter", created_at=now, amount_usd=Decimal("0.0123"))],
-            [SimpleNamespace(provider="Predis", updated_at=now, status="completed", result={}),
-             SimpleNamespace(provider="Creatify", updated_at=now, status="completed",
-                             result={"credits": 5, "ttsCredits": 2})],
+            jobs,
         ]
         with patch("app.spend_report._openrouter_balance", return_value={"remainingUsd": 9.5}), \
-             patch("app.spend_report._creatify_balance", return_value={"remainingCredits": 12, "balanceStatus": "ok"}):
+             patch("app.spend_report._creatify_balance", return_value={"remainingCredits": 12, "balanceStatus": "ok"}), \
+             patch("app.spend_report.read_predis_balance", return_value={"remainingCredits": 3200, "balanceStatus": "ok"}):
             result = read_spend_report(db)
         self.assertEqual(len(result["days"]), 90)
         providers = result["providers"]
@@ -50,6 +55,7 @@ class SpendReportTests(unittest.TestCase):
         self.assertEqual(providers["Predis"]["jobs"], 1)
         self.assertEqual(providers["Predis"]["creditReports"], 0)
         self.assertEqual(providers["Predis"]["credits"], 0)
+        self.assertEqual(providers["Predis"]["remainingCredits"], 3200)
         self.assertEqual(providers["Creatify"]["dailyCredits"][-1], 7)
         self.assertEqual(providers["Creatify"]["remainingCredits"], 12)
 

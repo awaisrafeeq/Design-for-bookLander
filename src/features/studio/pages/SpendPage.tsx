@@ -28,8 +28,23 @@ export default function SpendPage() {
   const [loading,setLoading]=useState(true);
   const [error,setError]=useState('');
   const [range,setRange]=useState<7|30|90>(30);
+  const [connecting,setConnecting]=useState(false);
+  const [connectionMessage,setConnectionMessage]=useState('');
   const load=useCallback(async()=>{setLoading(true);setError('');try{setReport(await studioApi.spendReport());}catch(cause){setError((cause as Error).message);}finally{setLoading(false);}},[]);
   useEffect(()=>{void load();},[load]);
+  useEffect(()=>{const result=new URLSearchParams(window.location.search).get('predis');if(result==='failed')setConnectionMessage('Predis sign-in did not complete. Please connect again.');else if(result==='cancelled')setConnectionMessage('Predis sign-in was cancelled.');else if(result==='connected')setConnectionMessage('Predis account connected. Reading the live credit balance…');},[]);
+  const connectPredis=async()=>{
+    setConnecting(true);setConnectionMessage('');
+    try{
+      const csrfResponse=await fetch('/api/auth/csrf',{cache:'no-store'});
+      const csrf=await csrfResponse.json() as {csrf_token?:string};
+      if(!csrfResponse.ok||!csrf.csrf_token)throw new Error('Your session expired. Sign in again.');
+      const response=await fetch('/api/v1/predis/connect',{method:'POST',headers:{'X-CSRF-Token':csrf.csrf_token}});
+      const data=await response.json() as {authorizationUrl?:string;detail?:string};
+      if(!response.ok||!data.authorizationUrl)throw new Error(data.detail||'Could not connect Predis');
+      window.location.assign(data.authorizationUrl);
+    }catch(cause){setConnectionMessage((cause as Error).message);setConnecting(false);}
+  };
   const dates=report?.days.slice(-range)||[];
   const router=report?.providers.OpenRouter;
   const predis=report?.providers.Predis;
@@ -40,6 +55,7 @@ export default function SpendPage() {
   return <div className="ai-spend-page">
     <div className="ai-spend-heading"><div><p className="ai-eyebrow">PROVIDER COSTS</p><h2>AI usage</h2><p className="muted">Spend and credits used by BookLender generations. Balances are live where the provider API supports them.</p></div><div className="ai-spend-actions"><div className="ai-spend-range" aria-label="Usage period">{([7,30,90] as const).map(days=><button key={days} className={`fchip ${range===days?'on':''}`} onClick={()=>setRange(days)}>{days} days</button>)}</div><button className="btn ghost sm" onClick={()=>void load()} disabled={loading}><Icon name="retry"/>{loading?'Refreshing…':'Refresh'}</button></div></div>
     {error&&<section className="card pad" role="alert">{error} <button className="btn sm ghost" onClick={()=>void load()}>Retry</button></section>}
+    {connectionMessage&&<section className="card pad" role="status">{connectionMessage}</section>}
     {!report&&loading&&<section className="card pad" role="status">Loading provider usage…</section>}
     {report&&<>
       <div className="ai-usage-summary" aria-label={`Summary for the last ${range} days`}>
@@ -50,7 +66,7 @@ export default function SpendPage() {
       </div>
       <section className="card pad ai-provider-card ai-provider-featured"><Header title="OpenRouter"><span className="pill ai r">USD</span></Header><div className="ai-provider-stats"><Metric label="BookLender spend" value={usageMoney(sum(routerDaily))} note={`Recorded in the last ${range} days`}/><Metric label={`Remaining ${router!.balanceScope||'key limit'}`} value={router!.remainingUsd==null?'—':money(router!.remainingUsd)} note={router!.remainingUsd==null?router!.status==='not_configured'?'API key is not configured':'Live balance unavailable or this key has no limit':router!.balanceScope==='account'?'Live OpenRouter account balance':'Live OpenRouter key spending limit'}/></div><UsageChart dates={dates} values={routerDaily} unit="usd"/><p className="ai-chart-note">BookLender request costs by Eastern date. OpenRouter account usage uses UTC and can include other apps.</p></section>
       <div className="ai-spend-grid">
-        <section className="card pad ai-provider-card"><Header title="Predis"><span className="pill ai r">Credits</span></Header><div className="ai-provider-stats"><Metric label="Estimated credits used" value={sum(predisDaily)>0?Number(sum(predisDaily).toFixed(1)).toLocaleString():'—'} note={sum(predisDaily)>0?`Estimated from generated images/slides · ${range} days`:'No recoverable media charges in this period'}/><Metric label="Account balance" value={predis!.remainingCredits==null?'—':Number(predis!.remainingCredits).toLocaleString()} note="Predis REST API does not expose account balance; OAuth/MCP is required"/></div><UsageChart dates={dates} values={predisDaily} unit="credits"/><p className="ai-chart-note">Estimated at 15 credits per generated image or carousel slide, using Predis&apos; published rate. Earlier jobs are included when their generated media can be recovered.</p></section>
+        <section className="card pad ai-provider-card"><Header title="Predis"><span className="pill ai r">Credits</span></Header><div className="ai-provider-stats"><Metric label="Estimated credits used" value={sum(predisDaily)>0?Number(sum(predisDaily).toFixed(1)).toLocaleString():'—'} note={sum(predisDaily)>0?`Estimated from generated images/slides · ${range} days`:'No recoverable media charges in this period'}/><Metric label="Actual account credits left" value={predis!.balanceStatus==='ok'&&predis!.remainingCredits!=null?Number(predis!.remainingCredits).toLocaleString():'—'} note={predis!.balanceStatus==='ok'?'Live from your Predis account':predis!.balanceStatus==='not_connected'?'Connect your Predis account to read its live balance':predis!.balanceStatus==='balance_tool_unavailable'?'Connected, but Predis did not expose a readable balance tool':'Predis balance is unavailable. Reconnect or refresh.'}/></div>{predis!.canConnect&&predis!.balanceStatus!=='ok'&&<button className="btn ghost sm" onClick={()=>void connectPredis()} disabled={connecting}>{connecting?'Connecting…':predis!.balanceStatus==='not_connected'?'Connect Predis account':'Reconnect Predis account'}</button>}<UsageChart dates={dates} values={predisDaily} unit="credits"/><p className="ai-chart-note">Used credits are estimated at 15 per generated image or carousel slide. The account balance comes from Predis after sign-in and includes activity outside BookLender.</p></section>
         <section className="card pad ai-provider-card"><Header title="Creatify"><span className="pill ai r">Credits</span></Header><div className="ai-provider-stats"><Metric label="Credits used" value={sum(creatifyDaily)>0?Number(sum(creatifyDaily).toFixed(1)).toLocaleString():'—'} note={`Provider-reported usage · last ${range} days`}/><Metric label="Remaining credits" value={creatify!.remainingCredits==null?'—':Number(creatify!.remainingCredits).toLocaleString()} note={creatify!.balanceStatus==='ok'?'Live from Creatify Workspace API':creatify!.balanceStatus==='not_configured'?'Creatify API credentials are not configured':'Creatify balance is temporarily unavailable'}/></div><UsageChart dates={dates} values={creatifyDaily} unit="credits"/><p className="ai-chart-note">Daily credits reported by Creatify jobs; remaining balance is fetched from the Workspace API.</p></section>
       </div>
       <p className="ai-spend-footnote">Predis estimates cover BookLender jobs with a saved media count. Predis account activity outside BookLender is not included. Currency and provider credits are shown separately.</p>

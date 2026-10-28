@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
-from app.routes import auth, health, studio, integrations
+from app.routes import auth, health, studio, integrations, predis
 from app.providers import ProviderError
 from fastapi.responses import JSONResponse
 
@@ -18,6 +18,7 @@ app.include_router(health.router)
 app.include_router(auth.router, prefix=settings.api_prefix)
 app.include_router(integrations.router, prefix=settings.api_prefix)
 app.include_router(studio.router, prefix=settings.api_prefix)
+app.include_router(predis.router, prefix=settings.api_prefix)
 
 
 @app.exception_handler(ProviderError)

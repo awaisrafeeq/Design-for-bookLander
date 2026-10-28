@@ -31,6 +31,7 @@ class Settings(BaseSettings):
     zernio_webhook_secret: str = ""
     predis_api_key: str = ""
     predis_brand_id: str = ""
+    predis_oauth_encryption_key: str = ""
     creatify_api_id: str = ""
     creatify_api_key: str = ""
     creatify_tts_accent: str = ""

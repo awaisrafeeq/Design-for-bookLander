@@ -117,6 +117,16 @@ class SpendEntry(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), index=True)
 
 
+class ProviderOAuthConnection(Base):
+    __tablename__ = "provider_oauth_connections"
+
+    provider: Mapped[str] = mapped_column(String(40), primary_key=True)
+    encrypted_credentials: Mapped[str] = mapped_column(Text, nullable=False)
+    connected_by: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"))
+    connected_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+
+
 class StudioPost(Base):
     __tablename__ = "studio_posts"
     __table_args__ = (

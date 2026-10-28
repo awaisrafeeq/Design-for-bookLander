@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.models import SpendEntry, StudioPost, WorkJob
+from app.predis_account import read_predis_balance
 
 
 def _number(value):
@@ -163,7 +164,7 @@ def read_spend_report(db: Session) -> dict:
             "Predis": {**totals["Predis"], "daily": [daily["Predis"][day] for day in days],
                        "dailyCredits": [daily_credits["Predis"][day] for day in days],
                        "dailyEstimatedCredits": [daily_estimated_credits["Predis"][day] for day in days],
-                       "remainingCredits": None, "balanceStatus": "not_available"},
+                       **read_predis_balance(db)},
             "Creatify": {**totals["Creatify"], "daily": [daily["Creatify"][day] for day in days],
                          "dailyCredits": [daily_credits["Creatify"][day] for day in days],
                          **_creatify_balance()},

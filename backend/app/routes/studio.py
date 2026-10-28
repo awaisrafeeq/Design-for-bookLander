@@ -878,7 +878,9 @@ def get_setting_resource(
             raise HTTPException(403, "AI spend access required")
         if request.query_params.get("detail") == "report":
             from app.spend_report import read_spend_report
-            return read_spend_report(db)
+            report = read_spend_report(db)
+            report["providers"]["Predis"]["canConnect"] = user.role == "admin"
+            return report
         return read_spend(db)
     if resource == "team":
         return read_team(db, user)

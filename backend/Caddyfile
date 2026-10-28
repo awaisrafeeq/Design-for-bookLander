@@ -1,6 +1,6 @@
 {$BOOKLENDER_CADDY_ADDRESS} {
   encode zstd gzip
-  @providerPaths path /api/v1/media/public/* /api/v1/webhooks/zernio
+  @providerPaths path /api/v1/media/public/* /api/v1/webhooks/zernio /api/v1/predis/*
   handle @providerPaths {
     reverse_proxy api:8000
   }
