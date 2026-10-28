@@ -1,22 +1,66 @@
 'use client';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, type PointerEvent } from 'react';
 import { studioApi, type SpendReport } from '../api';
 import { Header, Icon, money } from '../components/Design';
 
 type UsageUnit = 'usd' | 'credits';
+type ChartMode = 'daily' | 'cumulative';
 const usageMoney=(value:number)=>value>0&&value<.01?`$${value.toFixed(4)}`:money(value);
 const sum=(values:number[])=>values.reduce((total,value)=>total+value,0);
 
 function UsageChart({dates,values,unit}:{dates:string[];values:number[];unit:UsageUnit}) {
+  const [mode,setMode]=useState<ChartMode>('daily');
+  const [hoverIndex,setHoverIndex]=useState<number|null>(null);
+  const [selectedIndex,setSelectedIndex]=useState<number|null>(null);
   const width=900,height=220,left=56,right=16,top=18,bottom=34;
   const plotHeight=height-top-bottom;
-  const max=Math.max(unit==='usd'?.001:1,...values)*1.12;
+  const chartValues=mode==='daily'?values:values.map((_,index)=>sum(values.slice(0,index+1)));
+  const max=Math.max(unit==='usd'?.001:1,...chartValues)*1.12;
   const slot=(width-left-right)/Math.max(1,values.length);
   const labelEvery=values.length<=7?1:values.length<=30?5:15;
-  return <svg className="ai-usage-chart" viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`Daily ${unit} usage from ${dates[0]} to ${dates.at(-1)}`}>
-    {[0,.5,1].map(fraction=>{const y=top+plotHeight*(1-fraction);return <g key={fraction}><line x1={left} x2={width-right} y1={y} y2={y} className="ai-chart-grid"/><text x={left-10} y={y+4} textAnchor="end" className="ai-chart-label">{unit==='usd'?`$${(max*fraction).toFixed(max<.1?4:2)}${fraction===1?'':' '}`:Math.round(max*fraction)}</text></g>;})}
-    {values.map((value,index)=>{const barHeight=value>0?Math.max(2,value/max*plotHeight):0;const x=left+slot*index+slot*.2;return <g key={dates[index]}><rect x={x} y={top+plotHeight-barHeight} width={Math.max(1,slot*.6)} height={barHeight} rx="3" className="ai-chart-bar"><title>{`${dates[index]}: ${unit==='usd'?usageMoney(value):`${Number(value.toFixed(1))} credits`}`}</title></rect>{(index%labelEvery===0||index===values.length-1)&&<text x={x+slot*.3} y={height-9} textAnchor="middle" className="ai-chart-label">{dates[index]?.slice(5)}</text>}</g>;})}
-  </svg>;
+  const safeSelectedIndex=selectedIndex!=null&&selectedIndex<values.length?selectedIndex:null;
+  const activeIndex=hoverIndex!=null&&hoverIndex<values.length?hoverIndex:safeSelectedIndex;
+  const activeValue=activeIndex==null?null:chartValues[activeIndex];
+  const activeDate=activeIndex==null?null:dates[activeIndex];
+  const dateLabel=(value:string)=>new Intl.DateTimeFormat('en-US',{month:'short',day:'numeric',year:'numeric',timeZone:'UTC'}).format(new Date(`${value}T00:00:00Z`));
+  const pointLabel=(value:number)=>unit==='usd'?usageMoney(value):`${Number(value.toFixed(1)).toLocaleString()} credits`;
+  const pointerIndex=(event:PointerEvent<SVGSVGElement>)=>{
+    const rect=event.currentTarget.getBoundingClientRect();
+    const x=(event.clientX-rect.left)/rect.width*width;
+    return Math.max(0,Math.min(values.length-1,Math.floor((x-left)/slot)));
+  };
+  const activeX=activeIndex==null?null:left+slot*activeIndex+slot/2;
+  const peak=Math.max(...values,0);
+  const peakIndex=values.indexOf(peak);
+  const peakDate=peakIndex>=0?dates[peakIndex]:'';
+  return <div className="ai-chart-shell">
+    <div className="ai-chart-toolbar">
+      <div className="ai-chart-context"><strong>{mode==='daily'?'Daily activity':'Cumulative total'}</strong><span>{activeDate?`${dateLabel(activeDate)} · ${pointLabel(activeValue??0)}`:`Peak day ${peakDate?dateLabel(peakDate):'—'} · ${pointLabel(peak)}`}</span></div>
+      <div className="ai-chart-mode" role="group" aria-label="Chart view">
+        <button className={mode==='daily'?'active':''} onClick={()=>setMode('daily')} aria-pressed={mode==='daily'}>Daily</button>
+        <button className={mode==='cumulative'?'active':''} onClick={()=>setMode('cumulative')} aria-pressed={mode==='cumulative'}>Cumulative</button>
+      </div>
+    </div>
+    <svg className="ai-usage-chart" viewBox={`0 0 ${width} ${height}`} role="application" tabIndex={0}
+      aria-label={`${mode==='daily'?'Daily':'Cumulative'} ${unit} usage from ${dates[0]} to ${dates.at(-1)}. Hover or use arrow keys to inspect values.`}
+      onPointerMove={event=>{if(values.length)setHoverIndex(pointerIndex(event));}}
+      onPointerLeave={()=>setHoverIndex(null)}
+      onClick={event=>{if(values.length)setSelectedIndex(pointerIndex(event));}}
+      onKeyDown={event=>{
+        if(!values.length)return;
+        if(event.key==='ArrowRight'||event.key==='ArrowLeft'){
+          event.preventDefault();
+          const current=selectedIndex??0;
+          setSelectedIndex(Math.max(0,Math.min(values.length-1,current+(event.key==='ArrowRight'?1:-1))));
+          setHoverIndex(null);
+        }else if(event.key==='Escape'){setSelectedIndex(null);setHoverIndex(null);}
+      }}>
+      {[0,.5,1].map(fraction=>{const y=top+plotHeight*(1-fraction);const tick=max*fraction;return <g key={fraction}><line x1={left} x2={width-right} y1={y} y2={y} className="ai-chart-grid"/><text x={left-10} y={y+4} textAnchor="end" className="ai-chart-label">{unit==='usd'?usageMoney(tick):Math.round(tick).toLocaleString()}</text></g>;})}
+      {activeX!=null&&<line x1={activeX} x2={activeX} y1={top} y2={top+plotHeight} className="ai-chart-crosshair"/>}
+      {chartValues.map((value,index)=>{const barHeight=value>0?Math.max(2,value/max*plotHeight):0;const x=left+slot*index+slot*.2;return <g key={dates[index]}><rect x={x} y={top+plotHeight-barHeight} width={Math.max(1,slot*.6)} height={barHeight} rx="3" className={`ai-chart-bar${activeIndex===index?' is-active':''}`}><title>{`${dateLabel(dates[index])}: ${pointLabel(value)}`}</title></rect>{(index%labelEvery===0||index===values.length-1)&&<text x={x+slot*.3} y={height-9} textAnchor="middle" className="ai-chart-label">{dates[index]?.slice(5)}</text>}</g>;})}
+    </svg>
+    <div className="ai-chart-hint" aria-live="polite">{safeSelectedIndex!=null?`Pinned: ${dateLabel(dates[safeSelectedIndex])} · ${pointLabel(chartValues[safeSelectedIndex])}. Press Escape to clear.`:'Hover over the chart, click a day to pin it, or focus the chart and use ← / →.'}</div>
+  </div>;
 }
 
 function Metric({label,value,note}:{label:string;value:string;note:string}) {
