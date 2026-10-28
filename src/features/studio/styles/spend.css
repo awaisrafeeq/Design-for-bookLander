@@ -40,6 +40,18 @@
 .ai-spend-grid .ai-provider-card:first-child .ai-chart-bar{fill:var(--ai)}
 .ai-spend-grid .ai-provider-card:last-child .ai-chart-bar{fill:var(--ok)}
 .ai-chart-hint{min-height:16px;font-size:10px;color:var(--mute);padding:0 4px}
+.ai-chart-line{fill:none;stroke:var(--brand);stroke-width:3;stroke-linecap:round;stroke-linejoin:round;vector-effect:non-scaling-stroke}
+.ai-chart-dot{fill:var(--panel);stroke:var(--brand);stroke-width:2;vector-effect:non-scaling-stroke;transition:r .12s ease,fill .12s ease}
+.ai-chart-dot.is-active{fill:var(--brand)}
+.ai-chart-point{cursor:crosshair}
+.ai-calendar-shell{align-items:center}
+.ai-calendar-shell .ai-chart-toolbar,.ai-calendar-shell .ai-calendar-weekdays,.ai-calendar-shell .ai-calendar-grid,.ai-calendar-shell .ai-chart-hint{width:100%;max-width:400px}
+.ai-calendar-weekdays,.ai-calendar-grid{display:grid;gap:5px;justify-content:center}
+.ai-calendar-weekdays{font-size:9px;color:var(--mute);text-align:center;padding:4px 0 0}
+.ai-calendar-cell{width:34px;height:34px;border:1px solid var(--line);border-radius:6px;color:var(--ink);font:inherit;font-size:9px;line-height:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;cursor:pointer;transition:transform .12s ease,box-shadow .12s ease}
+.ai-calendar-cell span{opacity:.85}.ai-calendar-cell b{font-size:8px;font-weight:700}.ai-calendar-cell:hover,.ai-calendar-cell:focus-visible,.ai-calendar-cell.is-active{transform:translateY(-1px);outline:2px solid var(--brand);outline-offset:1px;z-index:1}
+.ai-calendar-scale{display:flex;align-items:center;gap:4px;color:var(--mute);font-size:9px;white-space:nowrap}.ai-calendar-scale i{display:block;width:11px;height:11px;border-radius:3px;background:var(--sunk);border:1px solid var(--line)}.ai-calendar-scale i:nth-of-type(2){background:color-mix(in srgb,var(--ai) 35%,var(--panel))}.ai-calendar-scale i:nth-of-type(3){background:color-mix(in srgb,var(--ai) 65%,var(--panel))}.ai-calendar-scale i:nth-of-type(4){background:var(--ai)}
+.ai-lollipop-mark{cursor:pointer;outline:none}.ai-lollipop-mark:focus-visible .ai-lollipop-dot{stroke:var(--ink);stroke-width:3}.ai-lollipop-stem{stroke:color-mix(in srgb,var(--ok) 48%,var(--line));stroke-width:2;vector-effect:non-scaling-stroke}.ai-lollipop-stem.is-active{stroke:var(--ok);stroke-width:3}.ai-lollipop-dot{fill:var(--ok);stroke:var(--panel);stroke-width:1.5;vector-effect:non-scaling-stroke}
 .ai-chart-note,.ai-spend-footnote{font-size:11px;color:var(--mute);line-height:1.5;margin:0}
 .ai-spend-footnote{padding:0 2px}
 .ai-data-note{color:var(--need)}
