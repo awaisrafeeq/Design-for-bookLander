@@ -6,8 +6,10 @@ import json
 import re
 import secrets
 import time
+from datetime import UTC, date, datetime
 from urllib.parse import urlencode
 from uuid import UUID
+from zoneinfo import ZoneInfo
 
 import httpx
 from cryptography.fernet import Fernet, InvalidToken
@@ -265,12 +267,27 @@ def _extract_balance(value, depth: int = 0) -> float | None:
     if depth > 5:
         return None
     if isinstance(value, dict):
+        # Some account tools group the balance under a `credits` object and call the
+        # nested field simply `remaining` or `available`.
+        for key, amount in value.items():
+            if key.casefold().replace("_", "").replace("-", "") in {"credit", "credits"} and isinstance(amount, dict):
+                for nested_key, nested_amount in amount.items():
+                    if nested_key.casefold().replace("_", "").replace("-", "") in {
+                        "remaining", "available", "left", "balance",
+                    }:
+                        number = _credit_number(nested_amount)
+                        if number is not None:
+                            return number
         for key, amount in value.items():
             normalized = key.casefold().replace("_", "").replace("-", "")
             if normalized in {
                 "remainingcredits",
                 "creditsremaining",
                 "availablecredits",
+                "creditavailable",
+                "remainingcredit",
+                "creditsleft",
+                "creditleft",
                 "creditbalance",
                 "balancecredits",
                 "currentcreditbalance",
@@ -303,8 +320,114 @@ def _text_balance(value: str) -> float | None:
     return _credit_number(match.group(1).replace(",", "")) if match else None
 
 
-def read_predis_balance(db: Session) -> dict:
-    result = {"remainingCredits": None, "balanceStatus": "not_connected", "balanceSource": None}
+def _tool_data(output: dict) -> list:
+    """Return structured MCP values and any JSON-encoded text content."""
+    if output.get("structuredContent") is not None:
+        return [output["structuredContent"]]
+    values = [{key: item for key, item in output.items() if key != "content"}]
+    for block in output.get("content", []):
+        if block.get("type") != "text":
+            continue
+        content = block.get("text") or ""
+        try:
+            values.append(json.loads(content))
+        except ValueError:
+            values.append(content)
+    return values
+
+
+def _safe_tool_arguments(tool: dict, days: list[str]) -> dict | None:
+    """Fill only conventional read-query parameters; skip tools needing unknown input."""
+    schema = tool.get("inputSchema") or {}
+    properties = schema.get("properties") or {}
+    args = {}
+    for field in schema.get("required") or []:
+        normalized = str(field).casefold().replace("_", "").replace("-", "")
+        spec = properties.get(field) or {}
+        if "default" in spec:
+            args[field] = spec["default"]
+        elif normalized in {"limit", "pagesize", "perpage", "maxresults"}:
+            args[field] = 100
+        elif normalized in {"page", "pagenumber", "offset"}:
+            args[field] = 1 if normalized != "offset" else 0
+        elif normalized in {"from", "start", "startdate", "fromdate", "since"} and days:
+            args[field] = days[0]
+        elif normalized in {"to", "end", "enddate", "todate", "until"} and days:
+            args[field] = days[-1]
+        elif spec.get("enum"):
+            args[field] = spec["enum"][0]
+        else:
+            return None
+    return args
+
+
+def _usage_records(value, zone: ZoneInfo, seen: set | None = None, depth: int = 0) -> list[tuple[date, float]]:
+    """Read only explicit per-run credit charges; do not treat plan balance as spend."""
+    if depth > 8:
+        return []
+    if seen is None:
+        seen = set()
+    records = []
+    if isinstance(value, dict):
+        normalized = {str(key).casefold().replace("_", "").replace("-", ""): item
+                      for key, item in value.items()}
+        amount = next((normalized[key] for key in (
+            "creditsused", "creditused", "creditsconsumed", "creditconsumed",
+            "creditcost", "creditscharged", "creditcharged", "usedcredits",
+        ) if key in normalized), None)
+        timestamp = next((normalized[key] for key in (
+            "createdat", "completedat", "updatedat", "timestamp", "date", "created",
+        ) if key in normalized), None)
+        number = _credit_number(amount)
+        if number is not None and timestamp is not None:
+            try:
+                if isinstance(timestamp, (int, float)):
+                    moment = datetime.fromtimestamp(timestamp, tz=UTC)
+                else:
+                    raw = str(timestamp).strip()
+                    if len(raw) == 10:
+                        day = date.fromisoformat(raw)
+                        identity = next((normalized[name] for name in ("id", "runid", "jobid", "postid")
+                                         if normalized.get(name) is not None), None)
+                        key = (str(identity) if identity is not None else json.dumps(
+                            {name: item for name, item in normalized.items()
+                             if isinstance(item, (str, int, float, bool, type(None)))},
+                            sort_keys=True, default=str))
+                        if key not in seen:
+                            seen.add(key)
+                            records.append((day, number))
+                        moment = None
+                    else:
+                        moment = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+                if moment is not None:
+                    if moment.tzinfo is None:
+                        moment = moment.replace(tzinfo=UTC)
+                    day = moment.astimezone(zone).date()
+                    identity = next((normalized[name] for name in ("id", "runid", "jobid", "postid")
+                                     if normalized.get(name) is not None), None)
+                    key = (str(identity) if identity is not None else json.dumps(
+                        {name: item for name, item in normalized.items()
+                         if isinstance(item, (str, int, float, bool, type(None)))},
+                        sort_keys=True, default=str))
+                    if key not in seen:
+                        seen.add(key)
+                        records.append((day, number))
+            except (OverflowError, OSError, TypeError, ValueError):
+                pass
+        for item in value.values():
+            records.extend(_usage_records(item, zone, seen, depth + 1))
+    elif isinstance(value, list):
+        for item in value:
+            records.extend(_usage_records(item, zone, seen, depth + 1))
+    return records
+
+
+def read_predis_data(db: Session, days: list[str], timezone: str) -> dict:
+    result = {
+        "remainingCredits": None, "balanceStatus": "not_connected", "balanceSource": None,
+        "dailyAccountCredits": [0.0] * len(days), "accountCredits": 0.0,
+        "accountCreditReports": 0, "historyStatus": "not_connected",
+    }
     connection = db.get(ProviderOAuthConnection, PROVIDER)
     if connection is None:
         return result
@@ -335,50 +458,108 @@ def read_predis_balance(db: Session) -> dict:
             tools, session_id = _rpc(
                 client, credentials["access_token"], "tools/list", 2, session_id=session_id
             )
-            for tool in tools.get("tools", []):
+            available = tools.get("tools", [])
+            balance_tools = []
+            history_tools = []
+            for tool in available:
                 name = str(tool.get("name") or "").casefold()
                 description = str(tool.get("description") or "").casefold()
                 schema = tool.get("inputSchema") or {}
                 annotations = tool.get("annotations") or {}
-                if schema.get("required") or annotations.get("readOnlyHint") is False:
-                    continue
-                if not any(
-                    word in f"{name} {description}"
-                    for word in ("credit", "balance", "account usage")
-                ):
+                if annotations.get("readOnlyHint") is False:
                     continue
                 if any(
                     word in name
                     for word in ("create", "generate", "charge", "deduct", "purchase", "update")
                 ):
                     continue
-                output, session_id = _rpc(
-                    client,
-                    credentials["access_token"],
-                    "tools/call",
-                    3,
-                    {"name": tool["name"], "arguments": {}},
-                    session_id,
-                )
+                searchable = f"{name} {description}"
+                compact_name = name.replace("_", "").replace("-", "")
+                is_history_tool = compact_name in {"listruns", "getruns", "listgenerations"}
+                if not is_history_tool and (compact_name in {"getaccount", "accountinfo", "getaccountinfo"} or any(
+                    word in searchable for word in ("credit", "balance", "account usage")
+                )):
+                    balance_tools.append(tool)
+                if name in {"list_runs", "listruns", "get_runs", "list_generations"} or any(
+                    word in searchable for word in ("credit history", "usage history", "generation history")
+                ):
+                    history_tools.append(tool)
+
+            # Predis exposes account information under get_account on some MCP clients;
+            # that name does not contain "credit" or "balance", so include it explicitly.
+            balance_calls = 0
+            for tool in balance_tools:
+                arguments = _safe_tool_arguments(tool, days)
+                if arguments is None:
+                    continue
+                balance_calls += 1
+                try:
+                    output, session_id = _rpc(
+                        client,
+                        credentials["access_token"],
+                        "tools/call",
+                        3,
+                        {"name": tool["name"], "arguments": arguments},
+                        session_id,
+                    )
+                except (PredisConnectionError, httpx.HTTPError, ValueError, KeyError, TypeError):
+                    continue
                 if output.get("isError"):
                     continue
-                balance = _extract_balance(output.get("structuredContent") or output)
-                if balance is None:
-                    for block in output.get("content", []):
-                        if block.get("type") == "text":
-                            try:
-                                balance = _extract_balance(json.loads(block.get("text") or ""))
-                            except ValueError:
-                                balance = _text_balance(block.get("text") or "")
+                balance = None
+                for value in _tool_data(output):
+                    balance = _extract_balance(value)
+                    if balance is None and isinstance(value, str):
+                        balance = _text_balance(value)
+                    if balance is not None:
+                        break
                 if balance is not None:
-                    return {
-                        "remainingCredits": balance,
-                        "balanceStatus": "ok",
-                        "balanceSource": "Predis MCP account",
-                    }
-        result["balanceStatus"] = "balance_tool_unavailable"
+                    result.update(remainingCredits=balance, balanceStatus="ok",
+                                  balanceSource="Predis MCP account")
+                    break
+            if result["balanceStatus"] != "ok":
+                result["balanceStatus"] = "balance_value_unrecognized" if balance_calls else "balance_tool_unavailable"
+
+            if history_tools and days:
+                zone = ZoneInfo(timezone)
+                first_day = date.fromisoformat(days[0]) if days else date.today()
+                totals = {day: 0.0 for day in days}
+                seen = set()
+                report_count = 0
+                for tool in history_tools:
+                    arguments = _safe_tool_arguments(tool, days)
+                    if arguments is None:
+                        continue
+                    try:
+                        output, session_id = _rpc(
+                            client, credentials["access_token"], "tools/call", 4,
+                            {"name": tool["name"], "arguments": arguments}, session_id,
+                        )
+                    except (PredisConnectionError, httpx.HTTPError, ValueError, KeyError, TypeError):
+                        continue
+                    if output.get("isError"):
+                        continue
+                    for value in _tool_data(output):
+                        records = _usage_records(value, zone, seen)
+                        for day, amount in records:
+                            day_key = day.isoformat()
+                            if day_key in totals and day >= first_day:
+                                totals[day_key] += amount
+                                report_count += 1
+                result["dailyAccountCredits"] = [totals[day] for day in days]
+                result["accountCredits"] = sum(totals.values())
+                result["accountCreditReports"] = report_count
+                result["historyStatus"] = "ok" if result["accountCreditReports"] else "no_reported_charges"
+            else:
+                result["historyStatus"] = "history_tool_unavailable"
     except PredisConnectionError:
         result["balanceStatus"] = "reconnect_required"
     except (httpx.HTTPError, ValueError, KeyError, TypeError):
         result["balanceStatus"] = "unavailable"
     return result
+
+
+def read_predis_balance(db: Session) -> dict:
+    """Backward-compatible balance reader for callers that do not need usage history."""
+    report = read_predis_data(db, [], "UTC")
+    return {key: report[key] for key in ("remainingCredits", "balanceStatus", "balanceSource")}

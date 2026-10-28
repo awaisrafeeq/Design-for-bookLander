@@ -46,7 +46,11 @@ class SpendReportTests(unittest.TestCase):
         ]
         with patch("app.spend_report._openrouter_balance", return_value={"remainingUsd": 9.5}), \
              patch("app.spend_report._creatify_balance", return_value={"remainingCredits": 12, "balanceStatus": "ok"}), \
-             patch("app.spend_report.read_predis_balance", return_value={"remainingCredits": 3200, "balanceStatus": "ok"}):
+             patch("app.spend_report.read_predis_data", return_value={
+                 "remainingCredits": 3200, "balanceStatus": "ok", "balanceSource": "test",
+                 "dailyAccountCredits": [0] * 90, "accountCredits": 0,
+                 "accountCreditReports": 0, "historyStatus": "history_tool_unavailable",
+             }):
             result = read_spend_report(db)
         self.assertEqual(len(result["days"]), 90)
         providers = result["providers"]

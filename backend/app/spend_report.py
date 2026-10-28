@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.models import SpendEntry, StudioPost, WorkJob
-from app.predis_account import read_predis_balance
+from app.predis_account import read_predis_data
 
 
 def _number(value):
@@ -155,6 +155,7 @@ def read_spend_report(db: Session) -> dict:
                 totals[provider]["creditReports"] += 1
                 daily_credits[provider][day] += amount
 
+    predis_account = read_predis_data(db, days, settings.booklender_timezone)
     return {
         "timezone": settings.booklender_timezone,
         "days": days,
@@ -164,7 +165,7 @@ def read_spend_report(db: Session) -> dict:
             "Predis": {**totals["Predis"], "daily": [daily["Predis"][day] for day in days],
                        "dailyCredits": [daily_credits["Predis"][day] for day in days],
                        "dailyEstimatedCredits": [daily_estimated_credits["Predis"][day] for day in days],
-                       **read_predis_balance(db)},
+                       **predis_account},
             "Creatify": {**totals["Creatify"], "daily": [daily["Creatify"][day] for day in days],
                          "dailyCredits": [daily_credits["Creatify"][day] for day in days],
                          **_creatify_balance()},
