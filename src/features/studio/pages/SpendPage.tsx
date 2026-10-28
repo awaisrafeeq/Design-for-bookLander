@@ -1,5 +1,5 @@
 'use client';
-import { useCallback, useEffect, useState, type PointerEvent } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { studioApi, type SpendReport } from '../api';
 import { Header, Icon, money } from '../components/Design';
 
@@ -24,9 +24,9 @@ function UsageChart({dates,values,unit}:{dates:string[];values:number[];unit:Usa
   const activeDate=activeIndex==null?null:dates[activeIndex];
   const dateLabel=(value:string)=>new Intl.DateTimeFormat('en-US',{month:'short',day:'numeric',year:'numeric',timeZone:'UTC'}).format(new Date(`${value}T00:00:00Z`));
   const pointLabel=(value:number)=>unit==='usd'?usageMoney(value):`${Number(value.toFixed(1)).toLocaleString()} credits`;
-  const pointerIndex=(event:PointerEvent<SVGSVGElement>)=>{
-    const rect=event.currentTarget.getBoundingClientRect();
-    const x=(event.clientX-rect.left)/rect.width*width;
+  const pointerIndex=(clientX:number,svg:SVGSVGElement)=>{
+    const rect=svg.getBoundingClientRect();
+    const x=(clientX-rect.left)/rect.width*width;
     return Math.max(0,Math.min(values.length-1,Math.floor((x-left)/slot)));
   };
   const activeX=activeIndex==null?null:left+slot*activeIndex+slot/2;
@@ -43,9 +43,9 @@ function UsageChart({dates,values,unit}:{dates:string[];values:number[];unit:Usa
     </div>
     <svg className="ai-usage-chart" viewBox={`0 0 ${width} ${height}`} role="application" tabIndex={0}
       aria-label={`${mode==='daily'?'Daily':'Cumulative'} ${unit} usage from ${dates[0]} to ${dates.at(-1)}. Hover or use arrow keys to inspect values.`}
-      onPointerMove={event=>{if(values.length)setHoverIndex(pointerIndex(event));}}
+      onPointerMove={event=>{if(values.length)setHoverIndex(pointerIndex(event.clientX,event.currentTarget));}}
       onPointerLeave={()=>setHoverIndex(null)}
-      onClick={event=>{if(values.length)setSelectedIndex(pointerIndex(event));}}
+      onClick={event=>{if(values.length)setSelectedIndex(pointerIndex(event.clientX,event.currentTarget));}}
       onKeyDown={event=>{
         if(!values.length)return;
         if(event.key==='ArrowRight'||event.key==='ArrowLeft'){
