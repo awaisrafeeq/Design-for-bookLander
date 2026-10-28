@@ -54,6 +54,7 @@
 .campaign-approval{background:var(--needbg);border:1px solid color-mix(in srgb,var(--need) 30%,var(--line));border-radius:var(--r3);overflow:hidden}
 .campaign-approval header{display:flex;align-items:center;gap:9px;padding:14px 16px;color:var(--need);font-size:13px}
 .campaign-approval header .i{width:21px;height:21px}
+.campaign-approval-toggle{display:inline-flex;align-items:center;justify-content:center;flex:0 0 26px;width:26px;height:26px;padding:0;border:1px solid color-mix(in srgb,var(--need) 28%,var(--line));border-radius:50%;background:color-mix(in srgb,var(--need) 9%,var(--panel));color:var(--need);cursor:pointer}.campaign-approval-toggle:hover,.campaign-approval-toggle:focus-visible{background:color-mix(in srgb,var(--need) 16%,var(--panel));outline:2px solid color-mix(in srgb,var(--need) 35%,transparent);outline-offset:1px}.campaign-approval-toggle .i{width:16px!important;height:16px!important}
 .campaign-approval header span{font-weight:400;color:var(--ink2)}
 .campaign-approval-row{display:flex;align-items:center;gap:12px;padding:10px 16px;border-top:1px solid color-mix(in srgb,var(--need) 18%,var(--line));min-width:0}
 .campaign-approval-row>img,.campaign-approval-row>.campaign-media-fallback{width:43px;height:48px;flex:0 0 43px;object-fit:cover;border-radius:4px}
