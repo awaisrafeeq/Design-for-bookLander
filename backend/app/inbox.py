@@ -47,12 +47,22 @@ def read_inbox(db, user, params):
         path = "/inbox/conversations" if detail == "conversations" else "/inbox/comments"
         if detail == "posts":
             query.update(sortBy="date", sortOrder="desc")
-    elif detail in {"messages", "comments", "ad_comments"}:
+    elif detail in {"messages", "comments", "ad_comments", "attachment"}:
         query.pop("profileId", None)
         query.pop("platform", None)
         query["accountId"] = account(db, params.get("accountId"))
         item_id = quote(identifier(params.get("id"), "thread"), safe="")
         path = f"/inbox/conversations/{item_id}/messages" if detail == "messages" else f"/inbox/comments/{item_id}"
+        if detail == "attachment":
+            message_id = quote(identifier(params.get("messageId"), "message"), safe="")
+            try:
+                attachment_index = int(params.get("index", ""))
+            except ValueError:
+                raise HTTPException(422, "Valid attachment index required") from None
+            if not 0 <= attachment_index < 10:
+                raise HTTPException(422, "Attachment index is out of range")
+            path = f"/inbox/conversations/{item_id}/messages/{message_id}/attachments/{attachment_index}"
+            return Zernio().request("GET", path, params={"accountId": query["accountId"], "format": "json"}, timeout=30)
         if detail == "ad_comments":
             path = f"/ads/{item_id}/comments"
             placement = params.get("placement")
@@ -72,7 +82,7 @@ def mutate_inbox(db, user, request, command):
     access(user)
     require_permission(user, "inbox.reply")
     action = command.get("action")
-    if action not in {"send_message", "send_comment", "like_comment", "hide_comment", "pin_comment"}:
+    if action not in {"send_message", "send_comment", "like_comment", "hide_comment", "pin_comment", "react_message"}:
         raise HTTPException(422, "Unknown inbox action")
     account_id = account(db, command.get("accountId"))
     target = identifier(command.get("id"), "thread")
@@ -87,6 +97,19 @@ def mutate_inbox(db, user, request, command):
         if action == "send_comment" and command.get("commentId"):
             body["commentId"] = identifier(command["commentId"], "comment")
         result = Zernio().request("POST", path, json=body, timeout=30)
+    elif action == "react_message":
+        message_id = quote(identifier(command.get("messageId"), "message"), safe="")
+        emoji = identifier(command.get("emoji"), "reaction")
+        if len(emoji) > 32:
+            raise HTTPException(422, "Reaction is too long")
+        # Slack expects named emoji, while the UI uses Unicode for every platform.
+        emoji = {"👍": ":thumbsup:", "❤️": ":heart:", "😂": ":joy:"}.get(emoji, emoji)
+        path = f"/inbox/conversations/{encoded}/messages/{message_id}/reactions"
+        if command.get("remove") is True:
+            result = Zernio().request("DELETE", path, params=body, timeout=30)
+        else:
+            body["emoji"] = emoji
+            result = Zernio().request("POST", path, json=body, timeout=30)
     else:
         comment = quote(identifier(command.get("commentId"), "comment"), safe="")
         operation = {"like_comment": "like", "hide_comment": "hide", "pin_comment": "pin"}[action]
