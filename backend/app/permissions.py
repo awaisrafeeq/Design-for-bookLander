@@ -12,6 +12,7 @@ PERMISSIONS = {
     "jobs.retry": "Retry background jobs", "logs.view": "View logs",
     "catalogue.manage": "Manage catalogue books",
     "campaigns.manage": "Create and edit campaign drafts", "campaigns.approve": "Review campaign drafts",
+    "inbox.reply": "Reply to messages and comments",
 }
 DEFAULTS = {
     "admin": set(PERMISSIONS),
@@ -22,7 +23,7 @@ DEFAULTS = {
 ACTION_MODULE = {
     "ideas": "Ideas", "content": "Board", "media": "Board", "review": "Review",
     "schedule": "Schedule", "publish": "Schedule", "brand": "Brand", "spend": "AI spend",
-    "sources": "Sources", "jobs": "Logs", "logs": "Logs", "catalogue": "Catalogue", "campaigns": "Campaigns",
+    "sources": "Sources", "jobs": "Logs", "logs": "Logs", "catalogue": "Catalogue", "campaigns": "Campaigns", "inbox": "Inbox",
 }
 
 

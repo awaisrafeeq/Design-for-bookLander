@@ -24,7 +24,7 @@ export type CampaignConnections = {connections:{platform:'meta'|'google';account
 export type CampaignAdTimeline = {rows:{date:string;currency?:string;spend?:number;impressions?:number;reach?:number;clicks?:number;ctr?:number;cpc?:number;cpm?:number;conversions?:number;allConversions?:number;costPerConversion?:number;purchaseValue?:number;roas?:number}[];backfillPending:boolean;platform:'meta'|'google';currency:string};
 export type LibraryAsset = { id: string; type: 'image' | 'video'; url: string; mime: string; size: number; name: string; createdAt: string };
 export type Library = { assets: LibraryAsset[]; nextCursor: string | null };
-export type ResourceMap = { snapshot: StudioState; dashboard: Dashboard; posts: Post[]; ideas: Post[]; review: Post[]; schedule: Post[]; calendar: Post[]; media: unknown; results: Results; campaigns: Campaigns; sources: Sources; catalogue: Catalogue; voices: Voices; help: HelpArticles; library: Library; brand: Brand; spend: Spend; team: TeamMember[]; logs: Activity[] };
+export type ResourceMap = { snapshot: StudioState; dashboard: Dashboard; posts: Post[]; ideas: Post[]; review: Post[]; schedule: Post[]; calendar: Post[]; media: unknown; results: Results; campaigns: Campaigns; inbox: unknown; sources: Sources; catalogue: Catalogue; voices: Voices; help: HelpArticles; library: Library; brand: Brand; spend: Spend; team: TeamMember[]; logs: Activity[] };
 export type Resource = keyof ResourceMap;
 
 const base = process.env.NEXT_PUBLIC_STUDIO_API_BASE_URL || '/api/studio';

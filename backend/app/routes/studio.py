@@ -53,7 +53,7 @@ ROLE_TO_API = {
     "viewer": "viewer",
 }
 ROLE_TO_LABEL = {value: key for key, value in ROLE_TO_API.items() if key[0].isupper()}
-MODULES = ["Board", "Ideas", "Review", "Schedule", "Results", "Campaigns", "Sources", "Catalogue", "Brand", "AI spend", "Team", "Logs"]
+MODULES = ["Board", "Ideas", "Review", "Schedule", "Results", "Campaigns", "Inbox", "Sources", "Catalogue", "Brand", "AI spend", "Team", "Logs"]
 ROLE_MODULES = {
     "admin": MODULES,
     "campaigns_manager": ["Board", "Ideas", "Review", "Schedule", "Results", "Campaigns", "Sources", "Catalogue", "Brand", "AI spend", "Logs"],
@@ -869,6 +869,9 @@ def get_setting_resource(
     db: Session = Depends(get_db),
 ):
     user = session_data[0]
+    if resource == "inbox":
+        from app.inbox import read_inbox
+        return read_inbox(db, user, request.query_params)
     if resource == "help":
         return {"articles": [{"q": title, "a": answer} for title, answer in ARTICLES]}
     if resource == "brand":
@@ -965,6 +968,9 @@ def post_setting_resource(
 ):
     user, session = session_data
     require_csrf(request, session)
+    if resource == "inbox":
+        from app.inbox import mutate_inbox
+        return mutate_inbox(db, user, request, command)
     if resource == "help":
         return answer_help(db, command.get("question"))
     if resource == "brand":
