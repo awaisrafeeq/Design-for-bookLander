@@ -80,7 +80,7 @@ export default function InboxPage({mode}:{mode:'messages'|'comments'}) {
             })}</div>}
             {!text&&!attachments.length&&<p>Message content unavailable.</p>}
             {mode==='messages'&&canReply&&supportsReactions(str(selected.platform))&&<div className="inbox-message-reactions">
-              <div className="inbox-existing-reactions">{Object.entries(grouped).map(([emoji,value])=><button key={emoji} className={`inbox-reaction-chip ${value.mine?'mine':''}`} disabled={Boolean(busyReaction)} title={value.mine?'Remove your reaction':`${value.count} reaction(s)`} onClick={()=>value.mine&&void reactToMessage(item,emoji)}>{emoji} {value.count}</button>)}</div>
+              <div className="inbox-existing-reactions">{ (Object.entries(grouped) as [string,{count:number;mine:boolean}][]).map(([emoji,value])=><button key={emoji} className={`inbox-reaction-chip ${value.mine?'mine':''}`} disabled={Boolean(busyReaction)} title={value.mine?'Remove your reaction':`${value.count} reaction(s)`} onClick={()=>value.mine&&void reactToMessage(item,emoji)}>{emoji} {value.count}</button>)}</div>
               <div className="inbox-reaction-choices">{reactionChoices.map(emoji=>{const mine=reactions.some((reaction:Row)=>reaction.fromMe&&reaction.emoji===emoji);const key=`${messageId}:${emoji}`;return <button key={emoji} className={`inbox-reaction-choice ${mine?'mine':''}`} disabled={Boolean(busyReaction)} title={mine?'Remove reaction':`React with ${emoji}`} aria-label={mine?`Remove ${emoji} reaction`:`React with ${emoji}`} onClick={()=>void reactToMessage(item,emoji)}>{busyReaction===key?<i className="inbox-spinner"/>:emoji}</button>})}</div>
             </div>}
             {mode==='comments'&&canReply&&!selected.isAd&&<div className="inbox-actions">
