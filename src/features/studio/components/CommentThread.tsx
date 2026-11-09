@@ -33,7 +33,7 @@ export function CommentThread(props:Props) {
     const replyCount=countReplies(item),hasMore=Boolean(page?.cursor||(!page&&(item.repliesHasMore===true||(replyCount!==null&&replyCount>children.length))));
     const name=author(item),picture=imageUrl(item.author?.profilePicture,item.author?.profilePictureUrl,item.author?.avatarUrl,item.from?.picture,item.from?.profilePicture,item.profilePicture,item.profilePictureUrl,item.avatarUrl);
     const isInstagram=platform.toLowerCase()==='instagram';
-    const likeIcon=<span className={`comment-like-icon ${isInstagram?'instagram':'facebook'} ${item.isLiked?'is-liked':''}`}><Icon name={isInstagram?'heart':'thumb'}/></span>;
+    const likeIcon=<span className={`comment-like-icon facebook ${item.isLiked?'is-liked':''}`}><Icon name="thumb"/></span>;
     const own=item.isFromMe===true||item.fromMe===true||item.isOwn===true||item.isOwnAccount===true||item.author?.isOwnAccount===true||item.from?.isOwner===true;
     const hidden=item.isHidden===true||item.hidden===true;
     const count=likes(item),isReplying=Boolean(itemId&&replyTo&&id(replyTo)===itemId);
@@ -44,7 +44,7 @@ export function CommentThread(props:Props) {
         <div className="comment-content"><div className="comment-author"><b>{name}</b>{own&&<span className="comment-badge">You</span>}{hidden&&<span className="comment-badge hidden">Hidden</span>}</div>
           <p>{text(item.message,item.text,item.content,item.body,'Comment content unavailable.')}</p>
           <div className="comment-meta"><time>{timestamp(text(item.createdAt,item.timestamp,item.createdTime))}</time>
-            {item.canLike&&canReply&&!isAd?<button type="button" className={`comment-like-action ${item.isLiked?'is-liked':''}`} disabled={Boolean(busy)} aria-label={`${item.isLiked?'Unlike':'Like'} comment${count!==null?`, ${count} likes`:''}`} aria-pressed={Boolean(item.isLiked)} onClick={()=>onModerate('like_comment',item,Boolean(item.isLiked))}>{busy===`${itemId}:like_comment`?<i className="inbox-spinner"/>:likeIcon}<span>{count!==null?count:item.isLiked?'Liked':'Like'}</span></button>:count!==null?<span className="comment-like-count" title={isInstagram?'Instagram comment liking is unavailable for this connected account.':undefined} aria-label={`${count} likes${isInstagram?'; liking unavailable for this account':''}`}>{likeIcon}<span>{count}</span>{isInstagram&&canReply&&!isAd&&<small>Like unavailable</small>}</span>:null}
+            {!isInstagram&&(item.canLike&&canReply&&!isAd?<button type="button" className={`comment-like-action ${item.isLiked?'is-liked':''}`} disabled={Boolean(busy)} aria-label={`${item.isLiked?'Unlike':'Like'} comment${count!==null?`, ${count} likes`:''}`} aria-pressed={Boolean(item.isLiked)} onClick={()=>onModerate('like_comment',item,Boolean(item.isLiked))}>{busy===`${itemId}:like_comment`?<i className="inbox-spinner"/>:likeIcon}<span>{count!==null?count:item.isLiked?'Liked':'Like'}</span></button>:count!==null?<span className="comment-like-count" aria-label={`${count} likes`}>{likeIcon}<span>{count}</span></span>:null)}
             {canReply&&!isAd&&item.canReply!==false&&<button type="button" onClick={()=>onReply(isReplying?null:item)}>Reply</button>}
             {canReply&&!isAd&&item.canHide&&action('hide_comment',hidden,hidden?'Unhide':'Hide',hidden?'Unhiding…':'Hiding…')}
             {canReply&&!isAd&&platform.toLowerCase()==='tiktok'&&action('pin_comment',Boolean(item.isPinned),item.isPinned?'Unpin':'Pin',item.isPinned?'Unpinning…':'Pinning…')}

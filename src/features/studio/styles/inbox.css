@@ -68,13 +68,10 @@
 .comment-meta .comment-like-action,.comment-like-count{display:inline-flex;align-items:center;gap:5px;line-height:1.2}
 .comment-meta .comment-like-action:hover{filter:brightness(.9)}
 .comment-like-count{color:var(--mute)}
-.comment-like-count small{font-size:10px;font-weight:500}
 .comment-like-icon{display:inline-grid;place-items:center;width:16px;height:16px;flex:none}
 .comment-like-icon .i{width:13px;height:13px;stroke-width:2}
 .comment-like-icon.facebook{background:#1877f2;color:#fff;border-radius:50%}
 .comment-like-icon.facebook .i{width:10px;height:10px;fill:currentColor;stroke-width:1.3}
-.comment-like-icon.instagram{color:#d44d72}
-.comment-like-icon.instagram.is-liked .i{fill:currentColor}
 .comment-meta button:disabled,.comment-load-replies:disabled{opacity:.65;cursor:wait}
 .comment-replies{display:grid;gap:8px;margin:8px 0 0 20px;padding-left:17px;border-left:2px solid var(--line)}
 .comment-load-replies{margin:10px 0 0 50px;font-size:12px}
