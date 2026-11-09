@@ -1,6 +1,7 @@
 'use client';
 import { useStudio } from './StudioProvider';
 import { Icon } from './Icon';
+import { PlatformLogo } from './PlatformLogo';
 import { atRisk, dayLabel, formats, getBook, money, owners, sources } from '../domain';
 import type { Book, Post } from '../types';
 
@@ -8,10 +9,10 @@ export function Who({ kind }: { kind: keyof typeof owners }) { const owner = own
 export function Chip({ children, tone = '' }: { children: React.ReactNode; tone?: string }) { return <span className={`chip ${tone}`}>{children}</span>; }
 export function SourceChip({ post }: { post: Post }) { const source = sources[post.source]; return <Chip><Icon name={source.icon}/>{source.label}</Chip>; }
 export function FormatChip({ post }: { post: Post }) { const format = formats[post.format]; return <Chip><Icon name={format.icon}/>{format.label}</Chip>; }
-export function PlatformChip({ post }: { post: Post }) { return <Chip>{post.platform}</Chip>; }
+export function PlatformChip({ post }: { post: Post }) { return <Chip><PlatformLogo platform={post.platform}/>{post.platform}</Chip>; }
 export function DueChip({ post }: { post: Post }) { if (post.eventDays == null || ['scheduled','published','archived'].includes(post.stage)) return null; const days = post.eventDays; return <Chip tone={days <= 3 ? 'red' : days <= 7 ? 'amber' : ''}><Icon name="clock"/>{days === 0 ? 'Today' : days === 1 ? '1 day left' : `${days} days left`}</Chip>; }
 export function VersionChip({ post }: { post: Post }) { return (post.version || 1) > 1 ? <Chip tone="amber">v{post.version}</Chip> : null; }
-export function Meta({ post }: { post: Post }) { return <span className="meta"><Icon name={formats[post.format].icon}/>{formats[post.format].label}<i/>{['scheduled','published'].includes(post.stage) && post.platforms?.length ? post.platforms.join(', ') : post.platform}</span>; }
+export function Meta({ post }: { post: Post }) { const platforms=['scheduled','published'].includes(post.stage) && post.platforms?.length ? post.platforms : [post.platform]; return <span className="meta"><Icon name={formats[post.format].icon}/>{formats[post.format].label}<i/>{platforms.map((platform,index)=><span className="platform-meta" key={`${platform}-${index}`}><PlatformLogo platform={platform}/>{platform}</span>)}</span>; }
 export function Cover({ bookId, book: suppliedBook }: { bookId?: string | null; book?: Book }) {
   const { state } = useStudio(); const book = suppliedBook || getBook(state, bookId || null);
   const [bg, fg, accent] = book.colors;

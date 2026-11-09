@@ -5,6 +5,7 @@ import { createPortal } from 'react-dom';
 import type { EmojiClickData } from 'emoji-picker-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Icon } from '../components/Icon';
+import { PlatformLogo } from '../components/PlatformLogo';
 import { CommentThread } from '../components/CommentThread';
 import { InboxMultiSelect } from '../components/InboxMultiSelect';
 import { useStudio } from '../components/StudioProvider';
@@ -29,11 +30,6 @@ const countOf = (row: Row): number => {
   return 0;
 };
 const nameOf = (row: Row, mode: string) => mode === 'messages' ? str(row.participantName,row.participantUsername,row.participant?.name,row.participant?.username,'Conversation') : str(row.content,row.text,row.caption,row.post?.content,row.title,'Untitled post');
-function PlatformLogo({ platform }: { platform: string }) {
-  const key = platform.toLowerCase().replace(/[^a-z]/g, '');
-  const labels: Record<string, string> = { facebook: 'f', instagram: '◎', tiktok: '♪', youtube: '▶', linkedin: 'in', twitter: '𝕏', x: '𝕏', whatsapp: '◔', threads: '@', telegram: '➤', slack: '✳' };
-  return <span className={`inbox-platform-logo ${key}`} aria-label={platform} title={platform}>{labels[key] || platform.slice(0, 1).toUpperCase()}</span>;
-}
 const reactionChoices = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
 const supportsReactions = (platform: string) => ['facebook', 'facebookmessenger', 'instagram', 'whatsapp', 'telegram', 'slack'].includes(platform.toLowerCase().replace(/[^a-z]/g, ''));
 const attachmentUrl = (attachment: Row, resolved = '') => safeUrl(resolved, attachment.url, attachment.previewUrl, attachment.mediaUrl, attachment.attachmentUrl, attachment.payload?.url);

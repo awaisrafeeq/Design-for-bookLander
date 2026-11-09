@@ -1,0 +1,18 @@
+.platform-logo{display:inline-grid;place-items:center;flex:none;width:20px;height:20px;border-radius:6px;background:#e8edf5;color:#243b60;vertical-align:middle}
+.platform-logo svg{display:block;width:15px;height:15px}
+.platform-logo.facebook,.platform-logo.facebookmessenger{border-radius:50%;background:#1877f2;color:#fff}
+.platform-logo.instagram{background:linear-gradient(135deg,#624acb 5%,#c13584 43%,#e1306c 65%,#f9a243 100%);color:#fff}
+.platform-logo.tiktok,.platform-logo.x,.platform-logo.twitter,.platform-logo.threads{background:#16191f;color:#fff}
+.platform-logo.youtube{background:#ff0033;color:#fff;border-radius:6px}
+.platform-logo.linkedin{background:#0a66c2;color:#fff}
+.platform-logo.pinterest{background:#bd081c;color:#fff;border-radius:50%}
+.platform-logo.whatsapp{background:#25d366;color:#fff;border-radius:50%}
+.platform-logo.telegram{background:#229ed9;color:#fff;border-radius:50%}
+.platform-logo.slack{background:#4a154b;color:#fff}
+.platform-logo.reddit{background:#ff4500;color:#fff;border-radius:50%}
+.platform-logo.googleads,.platform-logo.googleanalytics{background:#fff;border:1px solid #e4ddd1}
+.platform-meta{display:inline-flex;align-items:center;gap:4px;white-space:nowrap}
+.platform-meta .platform-logo{width:16px;height:16px;border-radius:4px}
+.platform-meta .platform-logo svg{width:12px;height:12px}
+.inbox-row-meta .platform-logo,.inbox-thread-platform .platform-logo{width:18px;height:18px}
+.inbox-row-meta .platform-logo svg,.inbox-thread-platform .platform-logo svg{width:14px;height:14px}
