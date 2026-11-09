@@ -102,12 +102,14 @@ def mutate_inbox(db, user, request, command):
         emoji = identifier(command.get("emoji"), "reaction")
         if len(emoji) > 32:
             raise HTTPException(422, "Reaction is too long")
-        # Slack expects named emoji, while the UI uses Unicode for every platform.
-        emoji = {"👍": ":thumbsup:", "❤️": ":heart:", "😂": ":joy:"}.get(emoji, emoji)
         path = f"/inbox/conversations/{encoded}/messages/{message_id}/reactions"
         if command.get("remove") is True:
             result = Zernio().request("DELETE", path, params=body, timeout=30)
         else:
+            # Slack requires named emoji codes; Meta/WhatsApp/Telegram use the Unicode emoji.
+            linked_account = db.get(ProviderAccount, account_id)
+            if linked_account and (linked_account.platform or "").casefold() == "slack":
+                emoji = {"👍": ":thumbsup:", "❤️": ":heart:", "😂": ":joy:"}.get(emoji, emoji)
             body["emoji"] = emoji
             result = Zernio().request("POST", path, json=body, timeout=30)
     else:

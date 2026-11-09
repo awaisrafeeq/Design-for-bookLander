@@ -23,11 +23,16 @@ class ProviderError(Exception):
             return "Check the provider dashboard before retrying: this request may already have been accepted."
         if self.provider == "OpenRouter" and self.status in {400, 404, 422}:
             return "Select a model/provider with strict JSON Schema support, such as openai/gpt-4.1-mini, then restart the worker and retry."
-        if self.provider == "Zernio" and self.status == 403:
+        if self.provider == "Zernio":
             detail = (self.detail or "").casefold()
-            if "outside" in detail and "window" in detail or "messaging window" in detail or "24-hour window" in detail:
+            if self.status == 403 and (
+                ("window" in detail and any(phrase in detail for phrase in ("outside", "closed", "24 hours", "24-hour")))
+                or "messaging window" in detail
+            ):
                 return ("The platform's reply window has expired, so it rejected this message. "
                         "Wait for the reader to message again or use an approved template where that platform supports it.")
+            if self.status == 400 and "invalid reaction" in detail:
+                return "The platform rejected this reaction. Try a standard emoji or confirm reactions are supported for this account."
         return {401: "Check the server API credentials.", 403: "Check API entitlement and account permissions.",
                 429: "Provider rate limit reached. Wait before retrying.",
                 400: "Check the selected account, media requirements and provider credits.",
