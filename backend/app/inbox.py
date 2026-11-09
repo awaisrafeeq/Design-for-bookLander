@@ -5,7 +5,7 @@ from fastapi import HTTPException
 from sqlalchemy import select
 
 from app.config import settings
-from app.models import AuditEvent, ProviderAccount
+from app.models import AuditEvent, ProviderAccount, WebhookInbox
 from app.permissions import require_permission
 from app.providers import Zernio
 
@@ -27,6 +27,92 @@ def account(db, value):
     if not item or not item.active:
         raise HTTPException(404, "Account is unavailable. Sync accounts in Sources & events.")
     return account_id
+
+
+def _reaction_events(db, account_id, conversation_id):
+    """Return this thread's received reaction events in chronological order."""
+    rows = db.scalars(
+        select(WebhookInbox)
+        .where(WebhookInbox.payload["event"].as_string() == "reaction.received")
+        .where(WebhookInbox.payload["account"]["id"].as_string() == account_id)
+        .where(WebhookInbox.payload["conversation"]["id"].as_string() == conversation_id)
+        .order_by(WebhookInbox.created_at.desc())
+        .limit(500)
+    ).all()
+    events = []
+    for row in reversed(rows):
+        payload = row.payload or {}
+        reaction = payload.get("reaction") or {}
+        conversation = payload.get("conversation") or {}
+        event_account = payload.get("account") or {}
+        if str(conversation.get("id") or "") != conversation_id:
+            continue
+        if str(event_account.get("id") or "") != account_id:
+            continue
+        events.append(payload)
+    return events
+
+
+def _apply_reaction_events(data, events, platform):
+    """Overlay webhook-confirmed own reactions, including removals, on the thread read."""
+    if not isinstance(data, dict) or not events:
+        return data
+    messages = data.get("messages")
+    container = data
+    if not isinstance(messages, list) and isinstance(data.get("data"), dict):
+        container = data["data"]
+        messages = container.get("messages")
+    if not isinstance(messages, list):
+        messages = data.get("items")
+        container = data
+    if not isinstance(messages, list):
+        return data
+
+    message_by_id = {}
+    for message in messages:
+        if not isinstance(message, dict):
+            continue
+        for key in ("id", "platformMessageId", "platformId"):
+            value = message.get(key)
+            if value is not None:
+                message_by_id[str(value)] = message
+    meta_platform = platform.casefold().replace("_", "").replace("-", "") in {"instagram", "facebook", "facebookmessenger"}
+    for payload in events:
+        reaction = payload.get("reaction") or {}
+        sender = reaction.get("sender") or {}
+        conversation = payload.get("conversation") or {}
+        sender_id = str(sender.get("id") or "")
+        participant_id = str(conversation.get("participantId") or "")
+        own = sender.get("isOwnAccount")
+        if not isinstance(own, bool) and sender_id and participant_id:
+            own = sender_id != participant_id
+        if own is not True:
+            continue
+        message_id = str(reaction.get("platformMessageId") or reaction.get("messageId") or "")
+        message = message_by_id.get(message_id)
+        if not message:
+            continue
+        current = message.get("reactions") if isinstance(message.get("reactions"), list) else []
+        emoji = str(reaction.get("emoji") or "")
+        action = str(reaction.get("action") or "").casefold()
+        mine = [item for item in current if isinstance(item, dict) and item.get("fromMe") is True]
+        others = [item for item in current if not (isinstance(item, dict) and item.get("fromMe") is True)]
+        if action == "removed":
+            # Meta may omit the removed emoji; in that case it means this actor's
+            # reaction was cleared. On Instagram/Messenger a sender has one active
+            # reaction per message, so clear the prior own reaction either way.
+            if emoji and not meta_platform:
+                mine = [item for item in mine if str(item.get("emoji") or "") != emoji]
+            else:
+                mine = []
+        elif action == "added" and emoji:
+            if meta_platform:
+                mine = []
+            if not any(str(item.get("emoji") or "") == emoji for item in mine):
+                mine.append({"emoji": emoji, "fromMe": True, "reactedAt": reaction.get("reactedAt")})
+        message["reactions"] = others + mine
+    container["messages"] = messages
+    return data
 
 
 def read_inbox(db, user, params):
@@ -75,13 +161,47 @@ def read_inbox(db, user, params):
             query["commentId"] = identifier(params.get("commentId"), "comment")
     else:
         raise HTTPException(422, "Unknown inbox view")
-    return Zernio().request("GET", path, params=query, timeout=30)
+    data = Zernio().request("GET", path, params=query, timeout=30)
+    if detail == "messages":
+        linked = db.get(ProviderAccount, query["accountId"])
+        events = _reaction_events(db, query["accountId"], params["id"])
+        data = _apply_reaction_events(data, events, linked.platform if linked else "")
+    return data
 
 
 def mutate_inbox(db, user, request, command):
     access(user)
-    require_permission(user, "inbox.reply")
     action = command.get("action")
+    if action == "configure_reaction_sync":
+        if user.role != "admin":
+            raise HTTPException(403, "Only an administrator can enable reaction syncing.")
+        if not settings.zernio_webhook_secret or not settings.public_app_url:
+            raise HTTPException(503, "Set the webhook secret and public app URL in the server settings first.")
+        webhook_url = f"{settings.public_app_url.rstrip('/')}{settings.api_prefix}/webhooks/zernio"
+        zernio = Zernio()
+        current = zernio.request("GET", "/webhooks/settings")
+        webhooks = current.get("webhooks") or current.get("items") or current.get("data") or []
+        if isinstance(webhooks, dict):
+            webhooks = webhooks.get("webhooks") or webhooks.get("items") or []
+        existing = next((item for item in webhooks if isinstance(item, dict) and item.get("url", "").rstrip("/") == webhook_url.rstrip("/")), None) if isinstance(webhooks, list) else None
+        events = list(existing.get("events") or []) if existing else []
+        if "reaction.received" not in events:
+            events.append("reaction.received")
+        webhook_body = {"name": (existing or {}).get("name") or "BookLender Studio", "url": webhook_url,
+                        "secret": settings.zernio_webhook_secret, "events": events, "isActive": True}
+        if existing and existing.get("profileIds") is not None:
+            webhook_body["profileIds"] = existing["profileIds"]
+        if existing and existing.get("accountIds") is not None:
+            webhook_body["accountIds"] = existing["accountIds"]
+        if existing:
+            webhook_body["webhookId"] = existing.get("webhookId") or existing.get("_id") or existing.get("id")
+            result = zernio.request("PUT", "/webhooks/settings", json=webhook_body, timeout=30)
+        else:
+            result = zernio.request("POST", "/webhooks/settings", json=webhook_body, timeout=30)
+        db.add(AuditEvent(actor_user_id=user.id, action="inbox.reaction_sync_enabled", resource_type="inbox", resource_id="zernio-webhook", request_id=request.headers.get("x-request-id"), details={"url": webhook_url}))
+        db.commit()
+        return {"message": "Instagram and Messenger reaction sync is enabled.", "webhook": result}
+    require_permission(user, "inbox.reply")
     if action not in {"send_message", "send_comment", "like_comment", "hide_comment", "pin_comment", "react_message"}:
         raise HTTPException(422, "Unknown inbox action")
     account_id = account(db, command.get("accountId"))

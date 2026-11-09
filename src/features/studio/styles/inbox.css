@@ -19,3 +19,4 @@
 .inbox-reaction-count{margin-left:3px;font-size:11px;line-height:1;font-weight:600;color:var(--mute,#6c7582)}
 .inbox-reaction-choice.mine .inbox-reaction-count{color:var(--brand,#243b60)}
 .inbox-reaction-choice{display:inline-flex;align-items:center;justify-content:center;gap:2px}
+.inbox-intro-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
