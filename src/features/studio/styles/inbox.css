@@ -86,8 +86,8 @@
 .inbox-filter-options{max-height:min(260px,40dvh);overflow:auto;padding:5px}
 .inbox-filter-options label{display:flex;align-items:center;gap:9px;padding:8px;border-radius:5px;font-size:12px;cursor:pointer}
 .inbox-filter-options label:hover{background:var(--raise)}
-.inbox-filter-options input{accent-color:var(--brand)}
-.inbox-filter-options span{min-width:0;overflow-wrap:anywhere}
+.inbox-filter-options input[type=checkbox]{flex:0 0 16px;width:16px;height:16px;min-height:0;margin:0;padding:0;accent-color:var(--brand);cursor:pointer}
+.inbox-filter-options span{flex:1;min-width:0;overflow-wrap:normal;word-break:normal}
 .inbox-filter-options p{margin:8px;color:var(--mute);font-size:12px}
 .inbox-message>.inbox-reaction-trigger{align-self:center;flex:none;opacity:0;pointer-events:none;transition:opacity .15s}
 .inbox-message:hover>.inbox-reaction-trigger,.inbox-message:focus-within>.inbox-reaction-trigger,.inbox-message>.inbox-reaction-trigger[aria-expanded=true]{opacity:1;pointer-events:auto}

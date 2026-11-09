@@ -1,0 +1,89 @@
+/* Shared sizing for controls and content that can otherwise force a grid wider. */
+input[type="checkbox"],input[type="radio"]{width:16px;height:16px;min-height:0;padding:0;flex:0 0 auto}
+.page,.page>*,.card,.tblwrap,.campaign-page,.results-page,.ai-spend-page{min-width:0}
+.tblwrap{max-width:100%;-webkit-overflow-scrolling:touch}
+.sheet{max-height:calc(100dvh - 24px);overflow-y:auto;overscroll-behavior:contain}
+.drawer,.schedule-modal,.catalogue-dialog,.brand-template-dialog,.results-dialog{max-height:calc(100dvh - 24px);overscroll-behavior:contain}
+.ideas{grid-template-columns:repeat(auto-fill,minmax(min(270px,100%),1fr))}
+.permission-grid{grid-template-columns:repeat(auto-fit,minmax(min(210px,100%),1fr))}
+.library-grid{grid-template-columns:repeat(auto-fill,minmax(min(180px,100%),1fr))}
+.results-followers{grid-template-columns:repeat(auto-fit,minmax(min(190px,100%),1fr))}
+.results-content-grid{grid-template-columns:repeat(auto-fit,minmax(min(175px,100%),1fr))}
+
+/* Account for the desktop sidebar when choosing dashboard breakpoints. */
+@container app (max-width:1250px){
+ .campaign-editor .campaign-create{grid-template-columns:minmax(0,1fr)}
+ .campaign-editor .campaign-rail{position:static;max-height:none;overflow:visible}
+ .campaign-editor .campaign-post-grid{grid-template-columns:repeat(3,minmax(0,1fr))}
+ .results-kpis{grid-template-columns:repeat(3,minmax(0,1fr))}
+ .ai-usage-summary{grid-template-columns:repeat(2,minmax(0,1fr))}
+ .ai-spend-grid{grid-template-columns:minmax(0,1fr)}
+}
+@container app (max-width:1050px){
+ .results-dashboard-grid,.results-lower-grid{grid-template-columns:minmax(0,1fr)}
+ .results-filters{grid-template-columns:repeat(2,minmax(0,1fr))}
+ .campaign-metrics{grid-template-columns:repeat(3,minmax(0,1fr))}
+}
+@container app (max-width:900px){
+ .top{position:relative}
+ .page{gap:18px}
+ .board-workspace .kb{min-width:0}
+ .inbox-shell .top{position:relative}
+}
+@media(max-width:800px){
+ .inbox-layout{grid-template-rows:minmax(100px,28%) minmax(0,1fr)}
+ .inbox-filters{grid-template-columns:repeat(2,minmax(0,1fr))}
+ .inbox-filter-menu{width:100%}
+ .inbox-thread-header{gap:8px}
+ .inbox-thread-header .btn{flex-shrink:0}
+ .inbox-composer>div:last-child{flex-wrap:wrap}
+ .inbox-message{min-width:0}
+ .inbox-bubble{min-width:0}
+ .inbox-message-meta{flex-wrap:wrap}
+}
+@media(max-width:650px){
+ .pad{padding:16px}
+ .campaign-title,.campaign-ai,.campaign-dashboard .campaign-title{align-items:stretch;flex-direction:column}
+ .campaign-fields,.campaign-options,.campaign-editor .campaign-options{grid-template-columns:minmax(0,1fr)}
+ .campaign-editor .campaign-post-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+ .campaign-secondary,.campaign-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}
+ .results-kpis,.results-interactions{grid-template-columns:repeat(2,minmax(0,1fr))}
+ .results-filters{grid-template-columns:minmax(0,1fr)}
+ .ai-spend-actions{flex-wrap:wrap;gap:8px}
+ .results-bar-row{grid-template-columns:minmax(55px,90px) minmax(0,1fr) 55px;gap:6px}
+ .schedule-calendar .fc .fc-toolbar{flex-wrap:wrap;justify-content:center}
+ .schedule-calendar .fc-daygrid-day-frame{min-height:76px}
+ .schedule-calendar .fc-daygrid-day-number{padding:4px}
+}
+@media(max-width:480px){
+ .main{--gut:12px}
+ .top{gap:8px;padding-block:10px}
+ .top h1{font-size:21px}
+ .top .hr{gap:5px}
+ .top .hr .btn{padding-inline:8px}
+ .tabbar :is(button,a){font-size:10px}
+ .page{gap:14px}
+ .campaign-step,.campaign-summary,.campaign-preview{padding:14px}
+ .campaign-editor .campaign-post-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+ .campaign-editor .campaign-mode-tabs{margin-left:0}
+ .inbox-intro-actions .btn{padding-inline:10px}
+ .inbox-thread-body{padding:10px}
+ .inbox-list-heading,.inbox-thread-header{padding:8px 10px}
+ .inbox-row{padding:10px}
+ .inbox-message{gap:6px}
+ .inbox-bubble{padding:10px}
+ .comment-card{padding:9px}
+ .comment-replies{margin-left:6px;padding-left:7px}
+ .inbox-filter-options label{min-height:38px}
+ .inbox-filter-options span{overflow-wrap:anywhere}
+ .results-content-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+ .log-pagination{flex-wrap:wrap}
+}
+/* On very short screens, keep the composer and navigation reachable. */
+@media(max-height:580px){
+ .inbox-shell .app,.shell:has(.board-workspace) .app{height:auto;min-height:100dvh;overflow:visible}
+ .inbox-shell .main,.shell:has(.board-workspace) .main{height:auto;min-height:100dvh}
+ .inbox-shell .page,.shell:has(.board-workspace) .page{overflow:visible}
+ .inbox-layout{flex:none;height:560px}
+ .board-workspace{min-height:450px}
+}
