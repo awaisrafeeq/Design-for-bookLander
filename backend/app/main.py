@@ -1,3 +1,5 @@
+import logging
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -5,6 +7,8 @@ from app.config import settings
 from app.routes import auth, health, studio, integrations, predis
 from app.providers import ProviderError
 from fastapi.responses import JSONResponse
+
+log = logging.getLogger(__name__)
 
 app = FastAPI(title=settings.app_name, version="0.1.0", docs_url="/docs" if settings.app_env != "production" else None)
 app.add_middleware(
@@ -23,4 +27,9 @@ app.include_router(predis.router, prefix=settings.api_prefix)
 
 @app.exception_handler(ProviderError)
 async def provider_error(request, error):
+    if request.url.path.endswith("/studio/inbox"):
+        # Keep provider codes/statuses in server logs, not in inbox UI copy.
+        log.warning("Inbox provider failure provider=%s status=%s operation=%s detail=%s",
+                    error.provider, error.status, error.operation or "request", error.detail)
+        return JSONResponse(status_code=502, content={"detail": error.inbox_message})
     return JSONResponse(status_code=502, content={"detail": f"{error}. {error.fix}"})

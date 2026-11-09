@@ -18,6 +18,27 @@ class ProviderError(Exception):
         super().__init__(message[:500])
 
     @property
+    def inbox_message(self):
+        """Safe, concise copy for inbox users; raw provider codes stay in server logs."""
+        detail = (self.detail or "").casefold()
+        if self.provider == "Zernio" and self.status == 403 and (
+            ("window" in detail and any(phrase in detail for phrase in ("outside", "closed", "24 hours", "24-hour")))
+            or "messaging window" in detail
+        ):
+            return "This conversation is outside the reply window. Ask the reader to message you again before replying."
+        if self.provider == "Zernio" and self.status == 400 and "invalid reaction" in detail:
+            return "That reaction could not be added. Please try again."
+        if self.status == 401:
+            return "The social account connection needs attention. Please reconnect it."
+        if self.status == 403:
+            return "This action is unavailable for the connected account. Check its permissions or reconnect it."
+        if self.status == 429:
+            return "Please wait a moment before trying again."
+        if self.status >= 500 or self.status == 0:
+            return "The social platform is temporarily unavailable. Please try again shortly."
+        return "We couldn't complete this action. Check the selected account and try again."
+
+    @property
     def fix(self):
         if self.ambiguous:
             return "Check the provider dashboard before retrying: this request may already have been accepted."
