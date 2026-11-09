@@ -16,15 +16,9 @@ from app.models import AuditEvent, AuthSession, Invitation, User
 from app.schemas import InvitationActivationRequest, LoginRequest, PasswordChangeRequest, ProfileUpdateRequest, SessionResponse, UserResponse
 from app.security import hash_password, hash_session_token, new_session_material, password_hasher, verify_password
 from app.permissions import effective_permissions
+from app.team_roles import MODULES
 
 router = APIRouter(prefix="/auth", tags=["auth"])
-ROLE_MODULES = {
-    "admin": ["Board", "Ideas", "Review", "Schedule", "Results", "Campaigns", "Inbox", "Sources", "Catalogue", "Brand", "AI spend", "Team", "Logs"],
-    "campaigns_manager": ["Board", "Ideas", "Review", "Schedule", "Results", "Campaigns", "Sources", "Catalogue", "Brand", "AI spend", "Logs"],
-    "approver": ["Board", "Ideas", "Review", "Schedule", "Results", "Campaigns", "Logs"],
-    "editor": ["Board", "Ideas", "Schedule", "Sources", "Catalogue", "Brand", "Logs"],
-    "viewer": ["Board", "Schedule", "Results"],
-}
 DUMMY_PASSWORD_HASH = password_hasher.hash(secrets.token_urlsafe(32))
 redis_client = Redis.from_url(settings.redis_url, socket_connect_timeout=2, socket_timeout=2)
 RATE_LIMIT_SCRIPT = """
@@ -60,7 +54,7 @@ def user_response(user: User) -> UserResponse:
         name=user.name,
         role=user.role,
         is_approver=user.is_approver,
-        modules=user.module_access if user.role != "admin" else ROLE_MODULES["admin"],
+        modules=user.module_access if user.role != "admin" else MODULES,
         permissions=effective_permissions(user),
     )
 

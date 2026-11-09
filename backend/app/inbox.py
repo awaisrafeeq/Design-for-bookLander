@@ -10,9 +10,10 @@ from app.permissions import require_permission
 from app.providers import Zernio
 
 
-def access(user):
-    if user.role != "admin" and "Inbox" not in (user.module_access or []):
-        raise HTTPException(403, "Inbox access required")
+def access(user, view):
+    required = "Messages" if view == "messages" else "Comments"
+    if user.role != "admin" and required not in (user.module_access or []):
+        raise HTTPException(403, f"{required} access required")
 
 
 def identifier(value, name):
@@ -30,11 +31,13 @@ def account(db, value):
 
 
 def read_inbox(db, user, params):
-    access(user)
     detail = params.get("detail", "conversations")
     if detail == "accounts":
+        if user.role != "admin" and not {"Messages", "Comments"}.intersection(user.module_access or []):
+            raise HTTPException(403, "Inbox access required")
         rows = db.scalars(select(ProviderAccount).where(ProviderAccount.active.is_(True)).order_by(ProviderAccount.name)).all()
         return {"accounts": [{"id": row.id, "platform": row.platform, "name": row.name} for row in rows]}
+    access(user, "messages" if detail in {"conversations", "messages", "attachment"} else "comments")
     query = {"limit": 50}
     for key in ("accountId", "platform", "cursor"):
         if params.get(key):
@@ -79,8 +82,8 @@ def read_inbox(db, user, params):
 
 
 def mutate_inbox(db, user, request, command):
-    access(user)
     action = command.get("action")
+    access(user, "messages" if action in {"send_message", "react_message"} else "comments")
     require_permission(user, "inbox.reply")
     if action not in {"send_message", "send_comment", "like_comment", "hide_comment", "pin_comment", "react_message"}:
         raise HTTPException(422, "Unknown inbox action")

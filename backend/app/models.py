@@ -31,6 +31,14 @@ class User(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
 
+class RolePreset(Base):
+    __tablename__ = "role_presets"
+
+    role: Mapped[str] = mapped_column(String(40), primary_key=True)
+    modules: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
 class AuthSession(Base):
     __tablename__ = "auth_sessions"
     __table_args__ = (UniqueConstraint("token_hash", name="uq_auth_sessions_token_hash"),)

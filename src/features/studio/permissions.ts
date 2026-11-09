@@ -7,5 +7,6 @@ export const actionPermissions: Record<string, string> = {
   'spend.edit': 'Change AI budget', 'sources.manage': 'Manage connections',
   'jobs.retry': 'Retry background jobs', 'logs.view': 'View logs',
   'catalogue.manage': 'Manage catalogue books',
+  'campaigns.manage': 'Create and edit campaign drafts', 'campaigns.approve': 'Review campaign drafts',
   'inbox.reply': 'Reply to messages and comments',
 };

@@ -15,5 +15,7 @@ const paths: Record<string,string> = {home:'M3 11l9-8 9 8M5 10v10h14V10',board:'
  flag:'M5 21V4h11l-1.5 4L16 12H5',trend:'M3 17l6-6 4 4 8-8M15 7h6v6',brush:'M9.5 14.5c-2.5 0-4 1.5-4 5.5 3.5 0 5.5-1.5 5.5-4zM10 14l10-10-2-2L8 12z',zap:'M13 2L4 14h7l-1 8 9-12h-7z',
  tv:'M3 6h18v12H3zM8 21h8M9 2l3 4 3-4',menu:'M4 7h16M4 12h16M4 17h16',
  pie:'M21.21 15.89A10 10 0 1 1 8 2.83M22 12A10 10 0 0 0 12 2v10z',
- search:'M11 3a8 8 0 1 0 0 16 8 8 0 0 0 0-16zM21 21l-4.35-4.35'};
+ search:'M11 3a8 8 0 1 0 0 16 8 8 0 0 0 0-16zM21 21l-4.35-4.35',
+ heart:'M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1.1-1.1a5.5 5.5 0 0 0-7.8 7.8L12 21l8.8-8.6a5.5 5.5 0 0 0 0-7.8z',
+ thumb:'M7 10v11H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3zM7 10l5-8a2 2 0 0 1 2 2v5h5a3 3 0 0 1 3 3l-1 7a3 3 0 0 1-3 2H7'};
 export function Icon({name,className=''}:{name:string;className?:string}) { return <svg className={`i ${className}`} viewBox="0 0 24 24" aria-hidden="true"><path d={paths[name] || paths.help}/></svg>; }

@@ -73,12 +73,24 @@ export async function GET(request: NextRequest, context: Context) {
   try {
     if (persistentResources.has(resource)) return await backendResource(request, resource, 'GET');
     if (resource === 'snapshot') {
-      const [brand, spend, team, posts, sources, logs] = await Promise.all(['brand', 'spend', 'team', 'posts', 'sources', 'logs'].map(name => backendResource(request, name, 'GET')));
-      if (!brand.ok || !spend.ok) return NextResponse.json({ error: 'Could not load saved settings from the backend.' }, { status: 503 });
+      const user = await authenticatedUser(request);
+      if (!user) return NextResponse.json({ error: 'Sign in required' }, { status: 401 });
+      const [brand, spend, team, posts, sources, logs] = await Promise.all([
+        backendResource(request, 'brand', 'GET'),
+        canAccess(user, 'AI spend') ? backendResource(request, 'spend', 'GET') : null,
+        canAccess(user, 'Team') ? backendResource(request, 'team', 'GET') : null,
+        backendResource(request, 'posts', 'GET'),
+        backendResource(request, 'sources', 'GET'),
+        user.permissions?.['logs.view'] ? backendResource(request, 'logs', 'GET') : null,
+      ]);
+      if (!brand.ok || (spend && !spend.ok)) return NextResponse.json({ error: 'Could not load saved settings from the backend.' }, { status: 503 });
       if (!posts.ok) return NextResponse.json({ error: 'Could not load saved workflow data from the backend.' }, { status: 503 });
       if (!sources.ok) return NextResponse.json({ error: 'Could not load saved source settings from the backend.' }, { status: 503 });
-      if (!logs.ok && logs.status !== 403) return NextResponse.json({ error: 'Could not load the audit log from the backend.' }, { status: 503 });
-      const [brandState, spendState, teamState, postsState, sourcesState, logsState, user] = await Promise.all([brand.json(), spend.json(), team.ok ? team.json() : Promise.resolve([]), posts.json(), sources.json(), logs.ok ? logs.json() : Promise.resolve([]), authenticatedUser(request)]);
+      if (logs && !logs.ok) return NextResponse.json({ error: 'Could not load the audit log from the backend.' }, { status: 503 });
+      const [brandState, spendState, teamState, postsState, sourcesState, logsState] = await Promise.all([
+        brand.json(), spend ? spend.json() : Promise.resolve({ text: 0, video: 0, image: 0, efficientModel: false, week: [] }),
+        team?.ok ? team.json() : Promise.resolve([]), posts.json(), sources.json(), logs ? logs.json() : Promise.resolve([]),
+      ]);
       const postCounts = {
         ideas: postsState.filter((post: { stage: string }) => post.stage === 'idea').length,
         picked: postsState.filter((post: { stage: string }) => post.stage === 'selected').length,

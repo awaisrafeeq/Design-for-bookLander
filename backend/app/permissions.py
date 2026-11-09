@@ -23,8 +23,17 @@ DEFAULTS = {
 ACTION_MODULE = {
     "ideas": "Ideas", "content": "Board", "media": "Board", "review": "Review",
     "schedule": "Schedule", "publish": "Schedule", "brand": "Brand", "spend": "AI spend",
-    "sources": "Sources", "jobs": "Logs", "logs": "Logs", "catalogue": "Catalogue", "campaigns": "Campaigns", "inbox": "Inbox",
+    "sources": "Sources", "jobs": "Logs", "logs": "Logs", "catalogue": "Catalogue", "campaigns": "Campaigns", "inbox": "Messages",
 }
+
+
+def has_module(user: User, module: str) -> bool:
+    available = user.module_access or []
+    if module == "Messages":
+        return "Messages" in available or "Comments" in available
+    if module == "Board":
+        return "Board" in available or "Media library" in available
+    return module in available
 
 
 def effective_permissions(user: User) -> dict[str, bool]:
@@ -32,11 +41,11 @@ def effective_permissions(user: User) -> dict[str, bool]:
         return dict.fromkeys(PERMISSIONS, True)
     defaults = DEFAULTS.get(user.role, set())
     overrides = user.permissions or {}
-    return {key: ACTION_MODULE[key.split(".")[0]] in (user.module_access or []) and overrides.get(key, user.is_approver if key == "review.approve" else key in defaults)
+    return {key: has_module(user, ACTION_MODULE[key.split(".")[0]]) and overrides.get(key, user.is_approver if key == "review.approve" else key in defaults)
             for key in PERMISSIONS}
 
 
 def require_permission(user: User, action: str) -> None:
     module = ACTION_MODULE[action.split(".")[0]]
-    if user.role != "admin" and (module not in user.module_access or not effective_permissions(user).get(action)):
+    if user.role != "admin" and (not has_module(user, module) or not effective_permissions(user).get(action)):
         raise HTTPException(403, f"Permission required: {PERMISSIONS[action]}")

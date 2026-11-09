@@ -26,6 +26,7 @@ export type LibraryAsset = { id: string; type: 'image' | 'video'; url: string; m
 export type Library = { assets: LibraryAsset[]; nextCursor: string | null };
 export type ResourceMap = { snapshot: StudioState; dashboard: Dashboard; posts: Post[]; ideas: Post[]; review: Post[]; schedule: Post[]; calendar: Post[]; media: unknown; results: Results; campaigns: Campaigns; inbox: unknown; sources: Sources; catalogue: Catalogue; voices: Voices; help: HelpArticles; library: Library; brand: Brand; spend: Spend; team: TeamMember[]; logs: Activity[] };
 export type Resource = keyof ResourceMap;
+export type RolePresets = {modules:string[];roles:Record<string,string[]>};
 
 const base = process.env.NEXT_PUBLIC_STUDIO_API_BASE_URL || '/api/studio';
 async function request<T>(resource: Resource, init?: RequestInit): Promise<T> {
@@ -44,6 +45,12 @@ async function request<T>(resource: Resource, init?: RequestInit): Promise<T> {
 }
 export const studioApi = {
   get<K extends Resource>(resource: K): Promise<ResourceMap[K]> { return request<ResourceMap[K]>(resource); },
+  async rolePresets():Promise<RolePresets>{
+    const response=await fetch(`${base}/team?detail=roles`,{cache:'no-store'});
+    const result=await response.json();
+    if(!response.ok)throw new Error(result.error||'Could not load role presets');
+    return result as RolePresets;
+  },
   async spendReport():Promise<SpendReport>{
     const response=await fetch(`${base}/spend?detail=report`,{cache:'no-store'});
     const result=await response.json();

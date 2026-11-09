@@ -5,13 +5,13 @@ from app.db import SessionLocal
 from app.models import User, AuditEvent
 from app.permissions import PERMISSIONS
 from app.security import hash_password
+from app.team_roles import MODULES
 
 CLIENT_USERS = [
     ("bookadmin@booklender.com", "BookLender Admin", "admin", False, ["Super admin"]),
     ("krishna@booklender.com", "Krishna", "campaigns_manager", True, ["Content Manager", "Campaigns Manager"]),
     ("ronnie@utsolutionsinc.com", "Ronnie", "campaigns_manager", False, ["Campaigns Manager"]),
 ]
-MODULES = ["Board", "Ideas", "Review", "Schedule", "Results", "Sources", "Catalogue", "Brand", "AI spend", "Team", "Logs"]
 
 
 def seed():

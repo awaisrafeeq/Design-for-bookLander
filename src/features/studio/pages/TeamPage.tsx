@@ -1,11 +1,12 @@
 'use client';
 
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { useStudio } from '../components/StudioProvider';
 import { actionPermissions } from '../permissions';
 import { Header, Icon } from '../components/Design';
 import { modules, roles } from '../domain';
 import type { TeamMember } from '../types';
+import { studioApi } from '../api';
 
 export default function TeamPage() {
   const { state, command, pending, notify } = useStudio();
@@ -14,7 +15,20 @@ export default function TeamPage() {
   const [inviteApprover, setInviteApprover] = useState(false);
   const [inviteLink, setInviteLink] = useState('');
   const [permissionUserId, setPermissionUserId] = useState('');
+  const [rolePresets, setRolePresets] = useState<Record<string,string[]>>(roles);
+  const [presetError, setPresetError] = useState('');
+  const [editingRole, setEditingRole] = useState('');
+  const [draftAccess, setDraftAccess] = useState<string[]>([]);
   const permissionUser = state.team.find(member => String(member.id) === permissionUserId);
+  useEffect(() => { void studioApi.rolePresets().then(result=>{setRolePresets(result.roles);setPresetError('');}).catch(error=>setPresetError((error as Error).message)); }, []);
+
+  async function savePreset() {
+    if (!editingRole) return;
+    if (await command('team',{action:'role_preset',role:editingRole,modules:draftAccess})) {
+      try { const result=await studioApi.rolePresets();setRolePresets(result.roles);setEditingRole('');setPresetError(''); }
+      catch (error) { setPresetError((error as Error).message); }
+    }
+  }
 
   async function invite(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -63,10 +77,14 @@ export default function TeamPage() {
       </section>
       <section className="card pad sec">
         <Header title="Ready-made roles"/>
-        <div>{Object.entries(roles).map(([name, access]) => <div className="tg" key={name}>
+        <p className="small muted">Edit a role to change access for future invitations and role assignments. Current members keep their individual access until you change it below.</p>
+        {presetError&&<p role="alert" className="small form-error">{presetError}</p>}
+        <div>{Object.entries(rolePresets).map(([name, access]) => <div className="tg" key={name}>
           <span className="t"><b>{name}</b><small>{access.length === modules.length ? 'Everything, and adds people' : access.join(', ')}</small></span>
           <span className="chip">{access.length} of {modules.length}</span>
+          {name!=='Super admin'&&<button type="button" className="btn ghost sm" onClick={()=>{setEditingRole(name);setDraftAccess([...access]);}}>Edit</button>}
         </div>)}</div>
+        {editingRole&&<div className="role-preset-editor"><h3>{editingRole} access</h3><div className="role-preset-grid">{modules.map(module=><label key={module}><input type="checkbox" checked={draftAccess.includes(module)} onChange={()=>setDraftAccess(current=>current.includes(module)?current.filter(item=>item!==module):[...current,module])}/>{module}</label>)}</div><div className="role-preset-actions"><button type="button" className="btn ghost sm" onClick={()=>setEditingRole('')}>Cancel</button><button type="button" className="btn sm" disabled={pending} onClick={()=>void savePreset()}>Save role</button></div></div>}
       </section>
     </div>
     <section className="card pad sec">

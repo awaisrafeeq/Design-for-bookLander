@@ -13,13 +13,14 @@ from sqlalchemy.orm import Session
 from app.auth import get_current_session, require_csrf
 from app.config import settings
 from app.db import get_db
-from app.models import (AuditEvent, AuthSession, BrandPolicyVersion, BrandRule, Invitation,
+from app.models import (AuditEvent, AuthSession, BrandPolicyVersion, BrandRule, Invitation, RolePreset,
                         ProviderAccount, SourceItem, SourceSetting, SpendEntry, SpendSettings,
                         StudioPost, User, WeeklyStyleLearning)
 from app.security import hash_password, hash_session_token
 from app.jobs import ACTIVE, job_dto, save_checks, snapshot_post, editable_stage, workflow_stage
 from app.models import WorkJob, Publication
 from app.permissions import PERMISSIONS, effective_permissions, require_permission
+from app.team_roles import MODULES, DEFAULT_ROLE_MODULES, role_modules, role_presets
 from app.workflow import generation_command, connections_dto, schedule_command, sync_accounts, accounts_dto
 from app.providers import Zernio, creatify_voices, text_completion, parse_generated_json
 from app.publishing import PLATFORMS
@@ -53,14 +54,6 @@ ROLE_TO_API = {
     "viewer": "viewer",
 }
 ROLE_TO_LABEL = {value: key for key, value in ROLE_TO_API.items() if key[0].isupper()}
-MODULES = ["Board", "Ideas", "Review", "Schedule", "Results", "Campaigns", "Inbox", "Sources", "Catalogue", "Brand", "AI spend", "Team", "Logs"]
-ROLE_MODULES = {
-    "admin": MODULES,
-    "campaigns_manager": ["Board", "Ideas", "Review", "Schedule", "Results", "Campaigns", "Sources", "Catalogue", "Brand", "AI spend", "Logs"],
-    "approver": ["Board", "Ideas", "Review", "Schedule", "Results", "Campaigns", "Logs"],
-    "editor": ["Board", "Ideas", "Schedule", "Sources", "Catalogue", "Brand", "Logs"],
-    "viewer": ["Board", "Schedule", "Results"],
-}
 
 
 def current_user_and_session(session_data: tuple[User, AuthSession] = Depends(get_current_session)) -> tuple[User, AuthSession]:
@@ -759,6 +752,20 @@ def require_approver(user: User) -> None:
 def mutate_team(db: Session, user: User, request: Request, command: dict) -> dict:
     require_admin(user)
     action = command.get("action")
+    if action == "role_preset":
+        role = ROLE_TO_API.get(str(command.get("role") or ""))
+        selected = command.get("modules")
+        if role not in DEFAULT_ROLE_MODULES or role == "admin" or not isinstance(selected, list) or any(not isinstance(item, str) or item not in MODULES for item in selected) or len(set(selected)) != len(selected):
+            raise HTTPException(422, "Choose a valid role and modules")
+        preset = db.get(RolePreset, role)
+        if preset is None:
+            preset = RolePreset(role=role, modules=[item for item in MODULES if item in selected])
+            db.add(preset)
+        else:
+            preset.modules = [item for item in MODULES if item in selected]
+        db.add(AuditEvent(actor_user_id=user.id, action="team.role_preset_updated", resource_type="role_preset", resource_id=role, request_id=request.headers.get("x-request-id"), details={"modules": preset.modules}))
+        db.commit()
+        return {"message": "Role preset saved for future assignments"}
     if action in {"invite", "resend"}:
         if action == "resend":
             try:
@@ -782,14 +789,14 @@ def mutate_team(db: Session, user: User, request: Request, command: dict) -> dic
         approver_flag = command.get("isApprover", False)
         if not isinstance(approver_flag, bool):
             raise HTTPException(status_code=422, detail="Approver setting must be true or false")
-        new_user = existing or User(email=email, name=name or email, role=role, password_hash=hash_password(secrets.token_urlsafe(32)), active=False, invited=True, module_access=ROLE_MODULES[role])
+        new_user = existing or User(email=email, name=name or email, role=role, password_hash=hash_password(secrets.token_urlsafe(32)), active=False, invited=True, module_access=role_modules(db, role))
         new_user.name = name or email
         new_user.role = role
         new_user.active = False
         new_user.invited = True
         new_user.is_approver = approver_flag or role == "approver"
         if not existing:
-            new_user.module_access = ROLE_MODULES[role]
+            new_user.module_access = role_modules(db, role)
         db.add(new_user)
         db.flush()
         token = secrets.token_urlsafe(32)
@@ -831,7 +838,7 @@ def mutate_team(db: Session, user: User, request: Request, command: dict) -> dic
         if target.role == "admin" and role != "admin" and db.scalar(select(User.id).where(User.role == "admin", User.active.is_(True), User.id != target.id).limit(1)) is None:
             raise HTTPException(status_code=409, detail="The last active admin cannot be demoted")
         target.role = role
-        target.module_access = ROLE_MODULES[role]
+        target.module_access = role_modules(db, role)
         target.is_approver = target.is_approver or role == "approver"
     elif action == "access":
         module = str(command.get("module") or "")
@@ -886,6 +893,9 @@ def get_setting_resource(
             return report
         return read_spend(db)
     if resource == "team":
+        if request.query_params.get("detail") == "roles":
+            require_admin(user)
+            return {"modules": MODULES, "roles": {ROLE_TO_LABEL[role]: access for role, access in role_presets(db).items()}}
         return read_team(db, user)
     if resource == "posts":
         return read_posts(db)

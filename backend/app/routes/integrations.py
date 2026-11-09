@@ -24,8 +24,8 @@ router = APIRouter(tags=["media and provider callbacks"])
 @router.get("/studio/library")
 def read_library(request: Request, session_data=Depends(get_current_session), db=Depends(get_db)):
     user, _ = session_data
-    if user.role != "admin" and "Board" not in (user.module_access or []):
-        raise HTTPException(403, "Board access required")
+    if user.role != "admin" and not {"Board", "Media library"}.intersection(user.module_access or []):
+        raise HTTPException(403, "Media library access required")
     query = select(MediaAsset).where(MediaAsset.post_id.is_(None))
     cursor = request.query_params.get("cursor")
     if cursor:
