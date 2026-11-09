@@ -20,3 +20,56 @@
 .inbox-reaction-choice.mine .inbox-reaction-count{color:var(--brand,#243b60)}
 .inbox-reaction-choice{display:inline-flex;align-items:center;justify-content:center;gap:2px}
 .inbox-intro-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+
+/* The inbox owns the viewport; the list and conversation scroll independently. */
+.inbox-shell .app{height:100dvh;min-height:0;overflow:hidden}
+.inbox-shell .main{height:100%;min-height:0}
+.inbox-shell .top{flex-shrink:0}
+.inbox-shell .page{flex:1;min-height:0;overflow:hidden;padding-block:20px 14px}
+.inbox-page{display:flex;flex-direction:column;flex:1;min-height:0}
+.inbox-intro,.inbox-tabs,.inbox-filters,.inbox-note,.inbox-page>.inbox-alert{flex-shrink:0}
+.inbox-intro{margin-bottom:14px}
+.inbox-tabs{margin-bottom:12px}
+.inbox-filters{margin-bottom:12px}
+.inbox-layout{flex:1;height:auto;min-height:0}
+.inbox-list-scroll,.inbox-thread-body{overscroll-behavior:contain}
+.inbox-composer textarea{resize:none;max-height:110px}
+.inbox-note{margin-top:8px}
+
+.inbox-reaction-trigger{display:inline-grid;place-items:center;width:28px;height:28px;border:1px solid var(--line);border-radius:50%;background:var(--surf);color:var(--mute);cursor:pointer;font-size:17px;line-height:1}
+.inbox-reaction-trigger:hover,.inbox-reaction-trigger[aria-expanded=true]{color:var(--brand);border-color:var(--brand);background:var(--brandsoft)}
+.inbox-reaction-trigger:focus-visible,.inbox-reaction-quick button:focus-visible{outline:2px solid var(--brand);outline-offset:2px}
+.inbox-reaction-popover{position:fixed;z-index:1000;width:min(350px,calc(100vw - 24px));padding:6px;background:var(--surf);border:1px solid var(--line);border-radius:10px;box-shadow:0 10px 32px #0003}
+.inbox-reaction-quick{display:flex;justify-content:space-between;gap:3px}
+.inbox-reaction-quick button{width:38px;height:36px;border:0;border-radius:7px;background:transparent;cursor:pointer;font-size:21px;line-height:1}
+.inbox-reaction-quick button:hover{background:var(--brandsoft)}
+.inbox-reaction-quick .inbox-reaction-more{color:var(--brand);font-size:23px}
+.inbox-reaction-popover .EmojiPickerReact{max-height:calc(100dvh - 90px);margin-top:6px}
+@container app (max-width:900px){.inbox-shell .page{padding-block:12px calc(72px + env(safe-area-inset-bottom,0px))}.inbox-intro{margin-bottom:8px}.inbox-intro h2{font-size:22px}.inbox-tabs a{padding-block:8px}.inbox-note{display:none}}
+@media(max-width:800px){.inbox-layout{height:auto;min-height:0;grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(90px,30%) minmax(0,1fr)}.inbox-list{height:auto;max-height:none;min-height:0}.inbox-thread{min-height:0}.inbox-thread-body{max-height:none}.inbox-list-heading,.inbox-thread-header{min-height:0;padding:10px 14px}.inbox-composer{padding:8px 12px}.inbox-composer textarea{min-height:48px}.inbox-filters{gap:6px}.inbox-intro p{display:none}}
+
+/* Comment threads keep replies visually attached to their parent. */
+.comment-section-label{display:block;margin-bottom:5px;color:var(--mute);font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase}
+.inbox-post-thumb{border-radius:6px;overflow:hidden}
+.inbox-post-thumb img,.comment-avatar img{width:100%;height:100%;object-fit:cover}
+.comment-thread-list{display:grid;gap:14px}
+.comment-branch{min-width:0}
+.comment-card{display:flex;gap:12px;padding:15px 16px;border:1px solid var(--line);border-radius:8px;background:var(--surf);color:var(--ink)}
+.comment-card.is-own{background:color-mix(in srgb,var(--brandsoft) 45%,var(--surf));border-color:color-mix(in srgb,var(--brand) 18%,var(--line))}
+.comment-card.is-hidden{background:var(--raise)}
+.comment-avatar{flex:none;display:grid;place-items:center;width:34px;height:34px;overflow:hidden;border-radius:50%;background:var(--brandsoft);color:var(--brand);font-size:12px;font-weight:700}
+.comment-content{flex:1;min-width:0}
+.comment-author{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:13px}
+.comment-badge{padding:2px 7px;border-radius:4px;background:var(--brandsoft);color:var(--brand);font-size:10px;font-weight:700}
+.comment-badge.hidden{background:var(--needbg);color:var(--need)}
+.comment-content>p{margin:6px 0 10px;white-space:pre-wrap;overflow-wrap:anywhere;font-size:13px;line-height:1.5}
+.comment-meta{display:flex;align-items:center;gap:14px;flex-wrap:wrap;color:var(--mute);font-size:11px}
+.comment-meta button,.comment-load-replies{padding:0;border:0;background:transparent;color:var(--brand);cursor:pointer;font:inherit;font-weight:600}
+.comment-meta button:disabled,.comment-load-replies:disabled{opacity:.65;cursor:wait}
+.comment-replies{display:grid;gap:8px;margin:8px 0 0 20px;padding-left:17px;border-left:2px solid var(--line)}
+.comment-load-replies{margin:10px 0 0 50px;font-size:12px}
+.comment-inline-reply{display:grid;gap:7px;margin-top:14px;padding:12px;background:var(--raise);border:1px solid var(--line);border-radius:7px}
+.comment-inline-reply label{color:var(--mute);font-size:11px;font-weight:600}
+.comment-inline-reply textarea{width:100%;min-height:64px;padding:9px 10px;resize:vertical;border:1px solid var(--line);border-radius:5px;background:var(--surf);color:var(--ink);font:inherit;font-size:13px}
+.comment-inline-reply>div{display:flex;justify-content:flex-end;gap:7px}
+@media(max-width:600px){.comment-card{padding:11px;gap:9px}.comment-replies{margin-left:10px;padding-left:10px}.comment-meta{gap:10px}.comment-load-replies{margin-left:34px}}
