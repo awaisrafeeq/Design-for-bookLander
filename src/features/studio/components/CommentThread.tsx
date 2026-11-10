@@ -35,18 +35,16 @@ export function CommentThread(props:Props) {
     const isInstagram=platform.toLowerCase()==='instagram';
     const likeIcon=<span className={`comment-like-icon facebook ${item.isLiked?'is-liked':''}`}><Icon name="thumb"/></span>;
     const own=item.isFromMe===true||item.fromMe===true||item.isOwn===true||item.isOwnAccount===true||item.author?.isOwnAccount===true||item.from?.isOwner===true;
-    const hidden=item.isHidden===true||item.hidden===true;
     const count=likes(item),isReplying=Boolean(itemId&&replyTo&&id(replyTo)===itemId);
     const action=(kind:string,remove:boolean,label:string,busyLabel:string)=><button type="button" disabled={Boolean(busy)} onClick={()=>onModerate(kind,item,remove)}>{busy===`${itemId}:${kind}`?<><i className="inbox-spinner"/>{busyLabel}</>:label}</button>;
     return <div className={`comment-branch ${depth?'is-reply':''}`} key={itemId||`${name}-${depth}`}>
-      <article className={`comment-card ${own?'is-own':''} ${hidden?'is-hidden':''}`}>
+      <article className={`comment-card ${own?'is-own':''}`}>
         <span className="comment-avatar">{picture?<img src={picture} alt="" onError={event=>{event.currentTarget.style.display='none';}}/>:name.slice(0,1).toUpperCase()}</span>
-        <div className="comment-content"><div className="comment-author"><b>{name}</b>{own&&<span className="comment-badge">You</span>}{hidden&&<span className="comment-badge hidden">Hidden</span>}</div>
+        <div className="comment-content"><div className="comment-author"><b>{name}</b>{own&&<span className="comment-badge">You</span>}</div>
           <p>{text(item.message,item.text,item.content,item.body,'Comment content unavailable.')}</p>
           <div className="comment-meta"><time>{timestamp(text(item.createdAt,item.timestamp,item.createdTime))}</time>
             {!isInstagram&&(item.canLike&&canReply&&!isAd?<button type="button" className={`comment-like-action ${item.isLiked?'is-liked':''}`} disabled={Boolean(busy)} aria-label={`${item.isLiked?'Unlike':'Like'} comment${count!==null?`, ${count} likes`:''}`} aria-pressed={Boolean(item.isLiked)} onClick={()=>onModerate('like_comment',item,Boolean(item.isLiked))}>{busy===`${itemId}:like_comment`?<i className="inbox-spinner"/>:likeIcon}<span>{count!==null?count:item.isLiked?'Liked':'Like'}</span></button>:count!==null?<span className="comment-like-count" aria-label={`${count} likes`}>{likeIcon}<span>{count}</span></span>:null)}
             {canReply&&!isAd&&item.canReply!==false&&<button type="button" onClick={()=>onReply(isReplying?null:item)}>Reply</button>}
-            {canReply&&!isAd&&item.canHide&&action('hide_comment',hidden,hidden?'Unhide':'Hide',hidden?'Unhiding…':'Hiding…')}
             {canReply&&!isAd&&platform.toLowerCase()==='tiktok'&&action('pin_comment',Boolean(item.isPinned),item.isPinned?'Unpin':'Pin',item.isPinned?'Unpinning…':'Pinning…')}
           </div>
           {isReplying&&<div className="comment-inline-reply"><label htmlFor={`reply-${itemId}`}>Replying to {name}</label><textarea id={`reply-${itemId}`} autoFocus value={draft} onChange={event=>onDraft(event.target.value)} placeholder="Write a public reply…" maxLength={10000}/><div><button type="button" className="btn ghost sm" onClick={()=>onReply(null)}>Cancel</button><button type="button" className="btn sm" disabled={!draft.trim()||sending} onClick={onSubmit}><Icon name="send"/>{sending?'Sending…':'Send reply'}</button></div></div>}
